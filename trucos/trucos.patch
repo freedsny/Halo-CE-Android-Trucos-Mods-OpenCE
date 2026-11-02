@@ -1241,7 +1241,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -807,6 +823,1092 @@
+@@ -807,6 +823,1157 @@
  	return;
  }
  
@@ -1486,6 +1486,10 @@
 +taken where there are */
 +#define GUIDE_MAP_PLAYER_SLOPE 0.7f
 +#define GUIDE_MAP_SLOPE_COST 1.5f
++/* and one up to about 60 degrees, which the player walks up slowly, at a
++higher cost still */
++#define GUIDE_MAP_STEEP_SLOPE 0.5f
++#define GUIDE_MAP_STEEP_COST 2.5f
 +/* a low wall the player jumps up or drops down (a step, a ledge, a bank
 +between two pieces of the terrain): at most this high, in world units (about
 +1.5 m up, 6 m down), at twice the cost */
@@ -1493,6 +1497,12 @@
 +#define GUIDE_MAP_DROP 2.f
 +#define GUIDE_MAP_STEP_COST 2.f
 +#define GUIDE_MAP_MAXIMUM_NEIGHBORS 32
++/* a bank of several walls and slopes is crossed through at most this many
++of its surfaces (each edge on the way within the climb and the drop) */
++#define GUIDE_MAP_BANK_SURFACES 3
++#define GUIDE_MAP_BANK_SEARCH 48
++/* the map's most work in a tick, in milliseconds */
++#define GUIDE_MAP_TICK_MILLISECONDS 3
 +
 +enum
 +{
@@ -1626,7 +1636,8 @@
 +}
 +
 +/* what the player can stand on: the AI's walkable surfaces, and slopes the
-+player walks up (GUIDE_MAP_PLAYER_SLOPE); 0 none, 1 the AI's, 2 a slope */
++player walks up (GUIDE_MAP_PLAYER_SLOPE, GUIDE_MAP_STEEP_SLOPE); 0 none, 1
++the AI's, 2 a slope, 3 a steep slope */
 +static short hud_port_guide_map_floor_kind(
 +	struct structure_bsp const *structure,
 +	struct collision_bsp const *bsp,
@@ -1641,7 +1652,11 @@
 +	}
 +	if (TEST_FLAG(pathfinding_surfaces[surface_index], GUIDE_MAP_WALKABLE_BIT))
 +		return 1;
-+	return hud_port_guide_map_slope(bsp, surface_index)>=GUIDE_MAP_PLAYER_SLOPE ? 2 : 0;
++	{
++		real up = hud_port_guide_map_slope(bsp, surface_index);
++
++		return up>=GUIDE_MAP_PLAYER_SLOPE ? 2 : up>=GUIDE_MAP_STEEP_SLOPE ? 3 : 0;
++	}
 +}
 +
 +/* the floors the player can come from to a surface (it walks from them onto
@@ -1690,7 +1705,8 @@
 +			{
 +				neighbors[count] = adjacent;
 +				middles[count] = edge_middles[ring_index];
-+				lengths[count] = distance3d(anchor, &edge_middles[ring_index])*(kind==1 ? 1.f : GUIDE_MAP_SLOPE_COST);
++				lengths[count] = distance3d(anchor, &edge_middles[ring_index])*
++					(kind==1 ? 1.f : kind==2 ? GUIDE_MAP_SLOPE_COST : GUIDE_MAP_STEEP_COST);
 +				count++;
 +			}
 +			continue;
@@ -1699,30 +1715,76 @@
 +		hud_port_guide_map_edge_kinds[up>=0.3f ? 4 : up>-0.3f ? 5 : 6]++;
 +		if (up>-0.3f)
 +		{
-+			/* a wall or a steep slope: the floors past it, if it is low enough */
-+			long far_adjacents[MAXIMUM_EDGES_PER_COLLISION_SURFACE];
-+			real_point3d far_middles[MAXIMUM_EDGES_PER_COLLISION_SURFACE];
-+			short far_count = hud_port_guide_map_ring(bsp, adjacent, far_adjacents, far_middles);
-+			short far_index;
-+
-+			for (far_index = 0; far_index<far_count && count<GUIDE_MAP_MAXIMUM_NEIGHBORS; far_index++)
++			/* a wall or a steep slope: the floors past it, through a bank of at
++			most GUIDE_MAP_BANK_SURFACES of them, if it is low enough: each edge
++			on the way within the climb and the drop from this surface's side */
++			struct
 +			{
-+				long far_adjacent = far_adjacents[far_index];
-+				/* (the player comes from the far floor: up to this surface's side) */
-+				real climb = edge_middles[ring_index].z-far_middles[far_index].z;
++				long surface_index;
++				real_point3d entry;
++				real length;
++				short depth;
++			} bank[GUIDE_MAP_BANK_SEARCH];
++			long seen[GUIDE_MAP_BANK_SEARCH];
++			short bank_count = 0;
++			short seen_count = 0;
++			real side_height = edge_middles[ring_index].z;
 +
-+				if (far_adjacent==NONE || far_adjacent==surface_index ||
-+					hud_port_guide_map_floor_kind(structure, bsp, far_adjacent)==0 ||
-+					climb>GUIDE_MAP_CLIMB || climb<-GUIDE_MAP_DROP)
++			bank[bank_count].surface_index = adjacent;
++			bank[bank_count].entry = edge_middles[ring_index];
++			bank[bank_count].length = distance3d(anchor, &edge_middles[ring_index]);
++			bank[bank_count].depth = 1;
++			bank_count++;
++			seen[seen_count++] = adjacent;
++			while (bank_count>0 && count<GUIDE_MAP_MAXIMUM_NEIGHBORS)
++			{
++				long far_adjacents[MAXIMUM_EDGES_PER_COLLISION_SURFACE];
++				real_point3d far_middles[MAXIMUM_EDGES_PER_COLLISION_SURFACE];
++				long wall_index = bank[--bank_count].surface_index;
++				real_point3d entry = bank[bank_count].entry;
++				real length = bank[bank_count].length;
++				short depth = bank[bank_count].depth;
++				short far_count = hud_port_guide_map_ring(bsp, wall_index, far_adjacents, far_middles);
++				short far_index;
++
++				for (far_index = 0; far_index<far_count && count<GUIDE_MAP_MAXIMUM_NEIGHBORS; far_index++)
 +				{
-+					continue;
++					long far_adjacent = far_adjacents[far_index];
++					/* (the player comes from the far side: up to this surface's) */
++					real climb = side_height-far_middles[far_index].z;
++					real far_length;
++					short seen_index;
++
++					if (far_adjacent==NONE || far_adjacent==surface_index ||
++						!VALID_INDEX(far_adjacent, bsp->surfaces.count) ||
++						climb>GUIDE_MAP_CLIMB || climb<-GUIDE_MAP_DROP)
++					{
++						continue;
++					}
++					for (seen_index = 0; seen_index<seen_count && seen[seen_index]!=far_adjacent; seen_index++)
++						;
++					if (seen_index<seen_count || seen_count>=GUIDE_MAP_BANK_SEARCH)
++						continue;
++					seen[seen_count++] = far_adjacent;
++					far_length = length+distance3d(&entry, &far_middles[far_index]);
++					if (hud_port_guide_map_floor_kind(structure, bsp, far_adjacent)!=0)
++					{
++						hud_port_guide_map_edge_kinds[7]++;
++						neighbors[count] = far_adjacent;
++						middles[count] = far_middles[far_index];
++						lengths[count] = far_length*GUIDE_MAP_STEP_COST;
++						count++;
++					}
++					else if (depth<GUIDE_MAP_BANK_SURFACES && bank_count<GUIDE_MAP_BANK_SEARCH &&
++						hud_port_guide_map_slope(bsp, far_adjacent)>-0.3f)
++					{
++						bank[bank_count].surface_index = far_adjacent;
++						bank[bank_count].entry = far_middles[far_index];
++						bank[bank_count].length = far_length;
++						bank[bank_count].depth = depth+1;
++						bank_count++;
++					}
 +				}
-+				hud_port_guide_map_edge_kinds[7]++;
-+				neighbors[count] = far_adjacent;
-+				middles[count] = far_middles[far_index];
-+				lengths[count] = (distance3d(anchor, &edge_middles[ring_index])+
-+					distance3d(&edge_middles[ring_index], &far_middles[far_index]))*GUIDE_MAP_STEP_COST;
-+				count++;
 +			}
 +		}
 +	}
@@ -1893,6 +1955,9 @@
 +	started = system_milliseconds();
 +	for (step = 0; step<GUIDE_MAP_STEPS_PER_TICK && hud_port_guide_map.heap_count>0; step++)
 +	{
++		/* (and no more than its time in a tick) */
++		if ((step & 63)==63 && system_milliseconds()-started>=GUIDE_MAP_TICK_MILLISECONDS)
++			break;
 +		long neighbors[GUIDE_MAP_MAXIMUM_NEIGHBORS];
 +		real_point3d middles[GUIDE_MAP_MAXIMUM_NEIGHBORS];
 +		real lengths[GUIDE_MAP_MAXIMUM_NEIGHBORS];
@@ -2334,7 +2399,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +2004,8 @@
+@@ -902,6 +2069,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
