@@ -63,21 +63,27 @@ El cambio se ve al volver al juego, sin reiniciar. La elección se guarda.
 - "Más cercano" es en línea recta: puede ser alguien al otro lado de una pared. La flecha te lleva por el camino para llegar a él (ver abajo).
 
 #### Funciona como un GPS
-La flecha **no apunta a través de las paredes**. Usa el mismo buscador de caminos con el que se mueven los marines y los Covenant por el mapa, y apunta a la **siguiente esquina, puerta o rampa** del camino. Cuando pasas esa esquina, salta a la siguiente.
+La flecha **no apunta a través de las paredes**: te lleva por donde se puede caminar, a cualquier distancia.
 
-- **Los metros** son siempre la distancia hasta el **objetivo final**, no hasta la esquina a la que apunta la flecha.
-- **Flecha doble (⌄⌄)**: es el GPS, el camino a seguir.
-- **Rombo (◆)**: no encontró camino y apunta en **línea recta** al objetivo. Te acerca igual, pero puede apuntar a una pared o a un barranco.
-- El camino se recalcula unas tres veces por segundo, y antes si el objetivo se mueve (un aliado o enemigo que camina).
+- **El mapa de distancias.** Cada vez que la flecha tiene un objetivo nuevo, el juego recorre una sola vez todo el piso de la parte del nivel que está cargada, empezando en el objetivo y extendiéndose hacia afuera, y anota en cada pedazo de piso cuántos metros faltan caminando y cuál es el siguiente pedazo hacia el objetivo. Cuenta el piso por donde caminan los marines y los Covenant, y también lo que solo tú puedes pasar: pendientes empinadas (hasta unos 60°), escalones y taludes que subes de un salto (hasta 1,5 m) o bajas (hasta 6 m). Los acantilados de verdad cuentan como paredes.
+- **El tramo corto.** Desde donde estás, la flecha sigue ese mapa unos 24 m hacia el objetivo, y el buscador de caminos de la IA calcula el tramo hasta ahí esquivando columnas y bordes. La flecha apunta a la **siguiente esquina, puerta o rampa** de ese tramo; cuando la pasas (o vas más cerca de la siguiente), salta a la siguiente.
+- **Sin trabas.** El mapa se arma en segundo plano, unos 1.500 pedazos de piso por tick y como mucho 3 milisegundos, así que tarda menos de un segundo y el juego no se pone lento. Mientras se arma, la flecha usa el buscador de la IA solo.
 
-#### Cuándo sale el rombo o la flecha se equivoca
-- **El objetivo está en otra parte del mapa que todavía no está cargada.** Los mapas se cargan por partes: estando dentro de un edificio, el exterior no está cargado, y al revés. En cuanto cruzas a esa parte, la flecha vuelve a ser GPS.
-- **El objetivo está arriba o abajo de un ascensor**, o en el aire: el buscador de caminos no sabe usar ascensores.
-- **El objetivo está muy lejos**: el GPS calcula solo la primera parte del camino y te lleva en esa dirección. En mapas abiertos y grandes (como **343 Guilty Spark**) a veces apunta hacia montañas que no se pueden cruzar; en ese caso camina un poco hacia los lados o sigue el camino del mapa y la flecha se corrige al acercarte. Está planeado mejorarlo.
+Lo que ves:
+
+- **Los metros** son la distancia **caminando** hasta el objetivo final cuando el mapa la conoce (si no, en línea recta), no hasta la esquina a la que apunta la flecha.
+- **Flecha doble (⌄⌄)**: es el GPS, el camino a seguir. En una curva puede quedar a un lado: apunta a la curva, no al destino.
+- **Rombo (◆)**: no hay camino que calcular y apunta en **línea recta** al objetivo. Te acerca igual, pero puede apuntar a una pared o a una puerta.
+- El camino se recalcula unas tres veces por segundo (el doble en un vehículo), y antes si el objetivo se mueve (un aliado o enemigo que camina).
+
+#### Cuándo sale el rombo
+- **El objetivo está en otra parte del mapa que todavía no está cargada.** Los mapas se cargan por partes: estando dentro de un edificio, el exterior no está cargado, y al revés (por ejemplo, en The Silent Cartographer). En cuanto cruzas a esa parte, la flecha vuelve a ser GPS.
+- **Vas en un ascensor o una plataforma que se mueve**, o el objetivo está arriba o abajo de uno, o en el aire: el GPS no sabe usar ascensores (pasa mucho en The Library).
+- **Una puerta que la misión abre más tarde**: el camino pasa por ella, y hay que esperar o hacer lo que pide la misión.
 
 #### Consejos
 - Si la flecha parece rara, camina unos pasos: se recalcula enseguida.
-- El GPS es liviano: busca el camino pocas veces por segundo y una sola búsqueda a la vez, así que el juego no se pone lento. En las pruebas no se notó ninguna diferencia.
+- Probado en Halo (con el Warthog), 343 Guilty Spark, The Library y The Silent Cartographer.
 - La flecha es solo una ayuda visual: no cambia la misión ni hace trampa con los enemigos.
 
 ### HUD movible

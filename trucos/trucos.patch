@@ -1241,7 +1241,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -807,6 +823,1170 @@
+@@ -807,6 +823,1122 @@
  	return;
  }
  
@@ -1562,10 +1562,6 @@
 +	return TAG_BLOCK_GET_ELEMENT(&structure->collision_bsp, 0, struct collision_bsp);
 +}
 +
-+/* (for debug.txt: what the edges the map came to led to: no surface, one not
-+the bsp's, a walkable one, a walkable slope, a steep slope, a wall, a ceiling) */
-+static long hud_port_guide_map_edge_kinds[8];
-+
 +/* how flat a surface is: the upward part of its plane's normal (1 flat, 0 a
 +wall, negative a ceiling) */
 +static real hud_port_guide_map_slope(
@@ -1688,19 +1684,16 @@
 +
 +		if (adjacent==NONE)
 +		{
-+			hud_port_guide_map_edge_kinds[0]++;
 +			continue;
 +		}
 +		if (!VALID_INDEX(adjacent, bsp->surfaces.count) ||
 +			!VALID_INDEX(adjacent, structure->pathfinding_surfaces.count))
 +		{
-+			hud_port_guide_map_edge_kinds[1]++;
 +			continue;
 +		}
 +		kind = hud_port_guide_map_floor_kind(structure, bsp, adjacent);
 +		if (kind!=0)
 +		{
-+			hud_port_guide_map_edge_kinds[kind==1 ? 2 : 3]++;
 +			if (count<GUIDE_MAP_MAXIMUM_NEIGHBORS)
 +			{
 +				neighbors[count] = adjacent;
@@ -1712,7 +1705,6 @@
 +			continue;
 +		}
 +		up = hud_port_guide_map_slope(bsp, adjacent);
-+		hud_port_guide_map_edge_kinds[up>=0.3f ? 4 : up>-0.3f ? 5 : 6]++;
 +		if (up>-0.3f)
 +		{
 +			/* a wall or a steep slope: the floors past it, through a bank of at
@@ -1769,7 +1761,6 @@
 +					far_length = length+distance3d(&entry, &far_middles[far_index]);
 +					if (hud_port_guide_map_floor_kind(structure, bsp, far_adjacent)!=0)
 +					{
-+						hud_port_guide_map_edge_kinds[7]++;
 +						neighbors[count] = far_adjacent;
 +						middles[count] = far_middles[far_index];
 +						lengths[count] = far_length*GUIDE_MAP_STEP_COST;
@@ -1925,9 +1916,6 @@
 +	hud_port_guide_map.reached_count = 0;
 +	hud_port_guide_map.started_tick = game_time_get();
 +	hud_port_guide_map.milliseconds = 0;
-+	error(_error_log, "guide: distance map started from surface %ld (floor %d) of %ld",
-+		goal_surface_index, candidate_index, count);
-+	csmemset(hud_port_guide_map_edge_kinds, 0, sizeof(hud_port_guide_map_edge_kinds));
 +
 +	return TRUE;
 +}
@@ -1995,13 +1983,6 @@
 +	if (hud_port_guide_map.heap_count==0)
 +	{
 +		hud_port_guide_map.complete = TRUE;
-+		error(_error_log, "guide: distance map done: %ld of %ld surfaces reached (floor %d) in %ld ticks, %lu ms of work",
-+			hud_port_guide_map.reached_count, hud_port_guide_map.surface_count, hud_port_guide_map.candidate_index,
-+			game_time_get()-hud_port_guide_map.started_tick+1, hud_port_guide_map.milliseconds);
-+		error(_error_log, "guide: its edges: none %ld, not the bsp's %ld, walkable %ld, slope %ld, steep %ld, wall %ld, ceiling %ld; steps %ld",
-+			hud_port_guide_map_edge_kinds[0], hud_port_guide_map_edge_kinds[1], hud_port_guide_map_edge_kinds[2],
-+			hud_port_guide_map_edge_kinds[3], hud_port_guide_map_edge_kinds[4], hud_port_guide_map_edge_kinds[5],
-+			hud_port_guide_map_edge_kinds[6], hud_port_guide_map_edge_kinds[7]);
 +	}
 +}
 +
@@ -2086,30 +2067,6 @@
 +	return TRUE;
 +}
 +
-+/* how the routes went, counted for debug.txt every half minute (S T P C F X B as
-+the route's status; M the way to the map's waypoint, N part of it) */
-+static long hud_port_guide_status_counts[128];
-+static long hud_port_guide_status_logged;
-+
-+static void hud_port_guide_note_status(
-+	char status)
-+{
-+	long time = game_time_get();
-+
-+	hud_port_guide_status_counts[(unsigned char)status & 127]++;
-+	if (time-hud_port_guide_status_logged>=30*TICKS_PER_SECOND || time<hud_port_guide_status_logged)
-+	{
-+		error(_error_log, "guide: routes M%ld N%ld P%ld C%ld T%ld S%ld F%ld X%ld B%ld; map %s %ld/%ld",
-+			hud_port_guide_status_counts['M'], hud_port_guide_status_counts['N'], hud_port_guide_status_counts['P'],
-+			hud_port_guide_status_counts['C'], hud_port_guide_status_counts['T'], hud_port_guide_status_counts['S'],
-+			hud_port_guide_status_counts['F'], hud_port_guide_status_counts['X'], hud_port_guide_status_counts['B'],
-+			!hud_port_guide_map.active ? "off" : hud_port_guide_map.complete ? "done" : "building",
-+			hud_port_guide_map.reached_count, hud_port_guide_map.surface_count);
-+		csmemset(hud_port_guide_status_counts, 0, sizeof(hud_port_guide_status_counts));
-+		hud_port_guide_status_logged = time;
-+	}
-+}
-+
 +static boolean hud_port_guide_route_find(
 +	long unit_index,
 +	real_point3d const *target,
@@ -2182,11 +2139,7 @@
 +		short candidate_index = hud_port_guide_map.candidate_index+1;
 +
 +		if (hud_port_guide_goal_floor(target, candidate_index, &next_goal, &next_goal_surface_index))
-+		{
-+			error(_error_log, "guide: the target's floor is an island (%ld surfaces): its floor %d is tried",
-+				hud_port_guide_map.reached_count, candidate_index);
 +			hud_port_guide_map_start(target, next_goal_surface_index, &next_goal, candidate_index);
-+		}
 +		else
 +			hud_port_guide_map.candidate_index = GUIDE_MAP_MAXIMUM_CANDIDATES;
 +	}
@@ -2288,7 +2241,6 @@
 +	}
 +
 +listo:
-+	hud_port_guide_note_status(route->status);
 +	return found;
 +}
 +
@@ -2412,7 +2364,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +2082,8 @@
+@@ -902,6 +2034,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
