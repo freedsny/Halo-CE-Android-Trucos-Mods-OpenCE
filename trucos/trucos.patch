@@ -1241,7 +1241,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -807,6 +823,984 @@
+@@ -807,6 +823,1006 @@
  	return;
  }
  
@@ -1545,6 +1545,10 @@
 +	return TAG_BLOCK_GET_ELEMENT(&structure->collision_bsp, 0, struct collision_bsp);
 +}
 +
++/* (for debug.txt: what the edges the map came to led to: no surface, one not
++the bsp's, a walkable one, a walkable slope, a steep slope, a wall, a ceiling) */
++static long hud_port_guide_map_edge_kinds[7];
++
 +/* how flat a surface is: the upward part of its plane's normal (1 flat, 0 a
 +wall, negative a ceiling) */
 +static real hud_port_guide_map_slope(
@@ -1601,6 +1605,19 @@
 +		edge_count++;
 +		right = surface_index==edge->surface_indices[1];
 +		adjacent = edge->surface_indices[!right];
++		if (adjacent==NONE)
++			hud_port_guide_map_edge_kinds[0]++;
++		else if (!VALID_INDEX(adjacent, bsp->surfaces.count) ||
++			!VALID_INDEX(adjacent, structure->pathfinding_surfaces.count))
++			hud_port_guide_map_edge_kinds[1]++;
++		else if (TEST_FLAG(pathfinding_surfaces[adjacent], GUIDE_MAP_WALKABLE_BIT))
++			hud_port_guide_map_edge_kinds[2]++;
++		else
++		{
++			real up = hud_port_guide_map_slope(bsp, adjacent);
++
++			hud_port_guide_map_edge_kinds[up>=GUIDE_MAP_PLAYER_SLOPE ? 3 : up>=0.3f ? 4 : up>-0.3f ? 5 : 6]++;
++		}
 +		if (adjacent!=NONE && VALID_INDEX(adjacent, bsp->surfaces.count) &&
 +			VALID_INDEX(adjacent, structure->pathfinding_surfaces.count) &&
 +			(TEST_FLAG(pathfinding_surfaces[adjacent], GUIDE_MAP_WALKABLE_BIT) ||
@@ -1763,6 +1780,7 @@
 +	hud_port_guide_map.milliseconds = 0;
 +	error(_error_log, "guide: distance map started from surface %ld (floor %d) of %ld",
 +		goal_surface_index, candidate_index, count);
++	csmemset(hud_port_guide_map_edge_kinds, 0, sizeof(hud_port_guide_map_edge_kinds));
 +
 +	return TRUE;
 +}
@@ -1829,6 +1847,10 @@
 +		error(_error_log, "guide: distance map done: %ld of %ld surfaces reached (floor %d) in %ld ticks, %lu ms of work",
 +			hud_port_guide_map.reached_count, hud_port_guide_map.surface_count, hud_port_guide_map.candidate_index,
 +			game_time_get()-hud_port_guide_map.started_tick+1, hud_port_guide_map.milliseconds);
++		error(_error_log, "guide: its edges: none %ld, not the bsp's %ld, walkable %ld, slope %ld, steep %ld, wall %ld, ceiling %ld",
++			hud_port_guide_map_edge_kinds[0], hud_port_guide_map_edge_kinds[1], hud_port_guide_map_edge_kinds[2],
++			hud_port_guide_map_edge_kinds[3], hud_port_guide_map_edge_kinds[4], hud_port_guide_map_edge_kinds[5],
++			hud_port_guide_map_edge_kinds[6]);
 +	}
 +}
 +
@@ -2226,7 +2248,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +1896,8 @@
+@@ -902,6 +1918,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
