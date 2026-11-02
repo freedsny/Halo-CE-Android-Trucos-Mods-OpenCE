@@ -1241,7 +1241,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -807,6 +823,1157 @@
+@@ -807,6 +823,1170 @@
  	return;
  }
  
@@ -2123,6 +2123,9 @@
 +	long goal_surface_index = NONE;
 +	struct biped_datum *biped = biped_try_and_get(unit_index);
 +	boolean found = FALSE;
++	/* the distance map's waypoint, when the route goes to it */
++	real_point3d map_waypoint = { 0 };
++	boolean map_waypoint_valid = FALSE;
 +
 +	route->step_count = 0;
 +	route->status = 'S';
@@ -2200,6 +2203,8 @@
 +			covers; the part of it that comes closest when something is in the
 +			way */
 +			route->status = 'M';
++			map_waypoint = waypoint;
++			map_waypoint_valid = TRUE;
 +			path_state_new(&input, &hud_port_guide_path_state, NULL);
 +			path_state_destination(&hud_port_guide_path_state, &waypoint, waypoint_surface_index, 0.5f);
 +			if (!path_state_find(&hud_port_guide_path_state))
@@ -2268,6 +2273,14 @@
 +			route->steps[route->step_count++] = path.steps[step_index].point;
 +		}
 +		found = route->step_count>0;
++	}
++	if (!found && map_waypoint_valid)
++	{
++		/* (the search reached it with no corner on the way, a straight line on
++		one floor: the waypoint itself) */
++		route->steps[0] = map_waypoint;
++		route->step_count = 1;
++		found = TRUE;
 +	}
 +	if (!found && route->status!='F')
 +	{
@@ -2399,7 +2412,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +2069,8 @@
+@@ -902,6 +2082,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
