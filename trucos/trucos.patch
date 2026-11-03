@@ -1469,7 +1469,7 @@
 +	}
 +	if (rim)
 +	{
-+		hud_port_polygon_band(shape, count, -MAX(1.0f, 0.8f*s), 0.0f,
++		hud_port_polygon_band(shape, count, -MAX(1.0f, 1.2f*s), 0.0f,
 +			hud_port_color(0.85f*MAX(alpha, 0.5f), hud_port_mix(rgb, 0xFFFFFF, 0.55f)),
 +			hud_port_color(0.85f*MAX(alpha, 0.5f), hud_port_mix(rgb, 0xFFFFFF, 0.55f)));
 +	}
@@ -1485,7 +1485,7 @@
 +	real s = hud_globals_get_scale(local_player_count()>1);
 +	real window_x0, window_y0, window_x1, middle;
 +	/* the shield's size, in HUD units (the health's place goes by it) */
-+	real const shield_width = 204.0f, shield_height = 14.0f, shield_top = 14.0f;
++	real const shield_width = 270.0f, shield_height = 18.0f, shield_top = 22.0f;
 +
 +	if (!hud_port_style_modern())
 +		return;
@@ -1496,7 +1496,7 @@
 +
 +	if (shield_vitality>=0.0f)
 +	{
-+		real width = shield_width*s, height = shield_height*s, cut = 9.0f*s;
++		real width = shield_width*s, height = shield_height*s, cut = 11.0f*s;
 +		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_shield, 0)*s;
 +		real y = window_y0+shield_top*s+hud_port_offset(_hud_port_part_shield, 1)*s;
 +		real line = MAX(1.0f, 0.8f*s);
@@ -1508,15 +1508,15 @@
 +		in a slant before its ends, and along under it; not part of its box in
 +		the touch editor, their length following where it is) */
 +		{
-+			real high = y-3.0f*s, low = y+height+6.0f*s;
-+			real slant = 22.0f*s;
++			real high = y-3.0f*s, low = y+height+9.0f*s;
++			real slant = 46.0f*s;
 +			real reach = MAX(40.0f*s, MIN(x-window_x0, window_x1-(x+width))-10.0f*s);
 +
 +			hud_port_part = _hud_port_part_none;
 +			hud_port_line_fade(x-slant, high, x-slant-reach, high, line, lines, hud_port_color(0.0f, HUD_PORT_BORDER));
-+			hud_port_line(x-slant, high, x-2.0f*s, low, line, lines);
-+			hud_port_line(x-2.0f*s, low, x+width+2.0f*s, low, line, hud_port_color(0.35f, HUD_PORT_BORDER));
-+			hud_port_line(x+width+2.0f*s, low, x+width+slant, high, line, lines);
++			hud_port_line(x-slant, high, x-4.0f*s, low, line, lines);
++			hud_port_line(x-4.0f*s, low, x+width+4.0f*s, low, line, hud_port_color(0.35f, HUD_PORT_BORDER));
++			hud_port_line(x+width+4.0f*s, low, x+width+slant, high, line, lines);
 +			hud_port_line_fade(x+width+slant, high, x+width+slant+reach, high, line, lines,
 +				hud_port_color(0.0f, HUD_PORT_BORDER));
 +			hud_port_part = _hud_port_part_shield;
@@ -1533,11 +1533,11 @@
 +
 +	if (body_vitality>=0.0f)
 +	{
-+		real icon_width = 17.0f*s, icon_height = 12.0f*s;
-+		real bar_width = 96.0f*s, bar_height = 9.0f*s;
++		real icon_width = 22.0f*s, icon_height = 16.0f*s;
++		real bar_width = 130.0f*s, bar_height = 13.0f*s;
 +		real total = icon_width+bar_width-2.0f*s;
 +		real x = middle-total*0.5f+hud_port_offset(_hud_port_part_health, 0)*s;
-+		real y = window_y0+(shield_top+shield_height+5.0f)*s+hud_port_offset(_hud_port_part_health, 1)*s;
++		real y = window_y0+(shield_top+shield_height+7.0f)*s+hud_port_offset(_hud_port_part_health, 1)*s;
 +		boolean low = body_vitality<0.3f;
 +		pixel32 rgb = low ? HUD_PORT_LOW : HUD_PORT_HEALTH;
 +		real alpha = body_vitality<0.25f && hud_port_blink_off() ? 0.35f : 1.0f;
@@ -1547,9 +1547,9 @@
 +		hud_port_part = _hud_port_part_health;
 +		/* the bar's panel: dark, its right end cut, and the bar in it */
 +		panel[0].x = bar_x; panel[0].y = bar_y;
-+		panel[1].x = bar_x+bar_width-4.5f*s; panel[1].y = bar_y;
++		panel[1].x = bar_x+bar_width-6.5f*s; panel[1].y = bar_y;
 +		panel[2].x = bar_x+bar_width; panel[2].y = bar_y+bar_height*0.5f;
-+		panel[3].x = bar_x+bar_width-4.5f*s; panel[3].y = bar_y+bar_height;
++		panel[3].x = bar_x+bar_width-6.5f*s; panel[3].y = bar_y+bar_height;
 +		panel[4].x = bar_x; panel[4].y = bar_y+bar_height;
 +		panel[5].x = bar_x; panel[5].y = bar_y+bar_height*0.5f;
 +		hud_port_polygon_band(panel, 6, 0.0f, 2.5f*s, hud_port_color(0.25f, HUD_PORT_SHIELD),
@@ -1557,11 +1557,11 @@
 +		hud_port_polygon_fill(panel, 6, hud_port_color(0.6f, HUD_PORT_PANEL));
 +		hud_port_polygon_band(panel, 6, -MAX(1.0f, 0.7f*s), 0.0f, hud_port_color(0.6f, HUD_PORT_BORDER),
 +			hud_port_color(0.6f, HUD_PORT_BORDER));
-+		hud_port_polygon_grow(panel, 6, -2.0f*s, inside);
-+		hud_port_relief_bar(inside, 6, bar_x+5.0f*s, bar_x+bar_width-4.0f*s, bar_y+2.0f*s, bar_y+bar_height-2.0f*s,
++		hud_port_polygon_grow(panel, 6, -3.0f*s, inside);
++		hud_port_relief_bar(inside, 6, bar_x+6.0f*s, bar_x+bar_width-7.0f*s, bar_y+3.0f*s, bar_y+bar_height-3.0f*s,
 +			body_vitality, rgb, alpha, s, FALSE);
 +		/* the cross in its own six-sided shape, at the bar's left */
-+		hud_port_cut_panel(x, y, icon_width, icon_height, 5.0f*s, icon);
++		hud_port_cut_panel(x, y, icon_width, icon_height, 6.5f*s, icon);
 +		hud_port_polygon_band(icon, 6, 0.0f, 2.5f*s, hud_port_color(0.3f, HUD_PORT_SHIELD),
 +			hud_port_color(0.0f, HUD_PORT_SHIELD));
 +		hud_port_polygon_fill(icon, 6, hud_port_color(0.75f, HUD_PORT_PANEL));
@@ -1571,8 +1571,8 @@
 +			real cross_x = x+icon_width*0.5f, cross_y = y+icon_height*0.5f;
 +			pixel32 cross = hud_port_color(1.0f, low ? HUD_PORT_LOW : 0xCFF6FF);
 +
-+			hud_port_rectangle(cross_x-4.0f*s, cross_y-1.2f*s, 8.0f*s, 2.4f*s, cross);
-+			hud_port_rectangle(cross_x-1.2f*s, cross_y-4.0f*s, 2.4f*s, 8.0f*s, cross);
++			hud_port_rectangle(cross_x-5.0f*s, cross_y-1.6f*s, 10.0f*s, 3.2f*s, cross);
++			hud_port_rectangle(cross_x-1.6f*s, cross_y-5.0f*s, 3.2f*s, 10.0f*s, cross);
 +		}
 +	}
 +
