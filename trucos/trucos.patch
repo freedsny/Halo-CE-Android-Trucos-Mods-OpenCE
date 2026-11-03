@@ -310,7 +310,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -553,6 +553,140 @@
+@@ -553,6 +553,144 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -433,6 +433,10 @@
 +	{ "hud.radar_fy", _config_integer, "0", "HALO_HUD_RADAR_FY", _environment_value, _platform_all,
 +		"The fine adjustment of hud.radar_y, added to it: so 625 is 600 and 25.\n"
 +		"In HUD units (the tags' 640x480). 0: none." },
++	{ "hud.modern", _config_boolean, "false", "HALO_HUD_MODERN", _environment_value, _platform_all,
++		"The modern HUD (pause menu, SETTINGS, TRUCOS, HUD: ESTILO): the shield and the\n"
++		"health as long bars at the top middle and the radar in an eight-sided panel\n"
++		"with rings. false: the maps' own." },
 +	{ "hud.radar_sweep", _config_boolean, "true", "HALO_HUD_RADAR_SWEEP", _environment_value, _platform_all,
 +		"Draws a turning sweep, a cross and rings over the radar (pause menu,\n"
 +		"SETTINGS, TRUCOS, HUD: RADAR). false: the maps' radar alone." },
@@ -474,7 +478,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -502,6 +502,155 @@
+@@ -502,6 +502,164 @@
      ],
  }
  
@@ -514,6 +518,8 @@
 +         "Municion infinita, modo dios, super salto y mas.\\nSolo en partidas que no son en red."),
 +        ("ARMAS Y VEHICULOS:", "network_setup/cheats_items",
 +         "Hace caer armas, vehiculos y powerups cerca de ti,\\no te vuelve invisible. Funcionan como botones."),
++        ("HUD: ESTILO:", "network_setup/cheats_hud_estilo",
++         "El HUD original o el moderno: escudo y vida en\\nbarras largas arriba y radar en un panel."),
 +        ("HUD: RADAR:", "network_setup/cheats_hud_radar",
 +         "El barrido del radar, y moverlo a otro lugar\nde la pantalla."),
 +        ("HUD: ESCUDO:", "network_setup/cheats_hud_shield",
@@ -564,6 +570,13 @@
 +         "Ponlo en ON y vuelve al juego: caen todos los\\npowerups cerca de ti y esto vuelve solo a OFF.", None),
 +        ("CAMUFLAJE ACTIVO:", "cheats.active_camouflage", ON_OFF,
 +         "Ponlo en ON y vuelve al juego: te vuelves invisible\\ny esto vuelve solo a OFF.", None),
++    ],
++}
++SCREENS["network_setup/cheats_hud_estilo"] = {
++    "screen": "cheats_hud_estilo_screen", "header": ("header_hud", f"{PE}/network_setup/cheats/header_hud"), "spacing": 30,
++    "rows": [
++        ("HUD MODERNO:", "hud.modern", ON_OFF,
++         "ON: escudo y vida en barras largas arriba en el\\ncentro, y el radar en un panel con anillos.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_hud_radar"] = {
@@ -659,7 +672,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -999,6 +1005,382 @@
+@@ -999,6 +1005,829 @@
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -925,6 +938,7 @@
 +	parameters.framebuffer_blend_function = _shader_framebuffer_blend_function_alpha_blend;
 +	parameters.map[0] = map;
 +	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
++	hud_port_note_quad(vertices); /* (where the part is, for the touch editor) */
 +
 +	return;
 +}
@@ -979,6 +993,447 @@
 +	return;
 +}
 +
++/* ---------- port: the modern HUD (TRUCOS, HUD: ESTILO, hud.modern)
++
++The shield as a long bar in a panel with cut ends at the top middle, thin
++lines running out from it to the sides; the health as a shorter bar under it
++with a cross, red when low; the radar in an eight-sided panel with rings, a
++cross, ticks and the player's arrow, in place of the map's pictures. The
++ammunition and grenades stay the map's. The parts move with the HUD settings
++(hud.<part>_x and _y) and the touch editor like the map's do. Sizes are in
++the HUD's units (the tags' 640x480). */
++
++#define HUD_PORT_PANEL 0x06121E
++#define HUD_PORT_SHIELD 0x4CC9FF
++#define HUD_PORT_BORDER 0x7FD8FF
++#define HUD_PORT_HEALTH 0x4FE3C8
++#define HUD_PORT_LOW 0xFF5A4A
++#define HUD_PORT_OVERSHIELD 0xFFE070
++#define HUD_PORT_LIGHT 0xEAF6FF
++#define HUD_PORT_MAXIMUM_POINTS 12
++
++boolean hud_port_style_modern(
++	void)
++{
++	static unsigned long changes = 0;
++	static boolean read = FALSE;
++	static boolean modern = FALSE;
++
++	if (!read || changes!=config_changes())
++	{
++		read = TRUE;
++		changes = config_changes();
++		modern = config_boolean("hud.modern")!=0;
++	}
++	return modern;
++}
++
++/* a and b mixed, t of b */
++static pixel32 hud_port_mix(
++	pixel32 a,
++	pixel32 b,
++	real t)
++{
++	long red = (long)(((a>>16)&0xFF)*(1.0f-t)+((b>>16)&0xFF)*t);
++	long green = (long)(((a>>8)&0xFF)*(1.0f-t)+((b>>8)&0xFF)*t);
++	long blue = (long)((a&0xFF)*(1.0f-t)+(b&0xFF)*t);
++
++	return (pixel32)((PIN(red, 0, 255)<<16)|(PIN(green, 0, 255)<<8)|PIN(blue, 0, 255));
++}
++
++static boolean hud_port_blink_off(
++	void)
++{
++	return (game_time_get()/8)&1;
++}
++
++/* a convex polygon, around clockwise on the screen, filled: a fan from its
++middle */
++static void hud_port_polygon_fill(
++	real_point2d const *points,
++	short count,
++	pixel32 color)
++{
++	real_point2d middle;
++	short index;
++
++	if (count<3)
++		return;
++	middle.x = 0.0f;
++	middle.y = 0.0f;
++	for (index = 0; index<count; index++)
++	{
++		middle.x += points[index].x;
++		middle.y += points[index].y;
++	}
++	middle.x /= count;
++	middle.y /= count;
++	for (index = 0; index<count; index++)
++	{
++		real_point2d quad[4];
++		pixel32 colors[4];
++
++		quad[0] = middle;
++		quad[1] = points[index];
++		quad[2] = points[(index+1)%count];
++		quad[3] = middle;
++		colors[0] = colors[1] = colors[2] = colors[3] = color;
++		hud_port_quad(quad, colors);
++	}
++}
++
++/* its outline moved out by grow (negative: in) */
++static void hud_port_polygon_grow(
++	real_point2d const *points,
++	short count,
++	real grow,
++	real_point2d *result)
++{
++	short index;
++
++	for (index = 0; index<count; index++)
++	{
++		real_point2d const *previous = &points[(index+count-1)%count];
++		real_point2d const *point = &points[index];
++		real_point2d const *next = &points[(index+1)%count];
++		real ax = point->y-previous->y, ay = previous->x-point->x;
++		real bx = next->y-point->y, by = point->x-next->x;
++		real a = (real)sqrt(ax*ax+ay*ay), b = (real)sqrt(bx*bx+by*by);
++		real mx, my, m, cosine;
++
++		if (a<0.0001f || b<0.0001f)
++		{
++			result[index] = *point;
++			continue;
++		}
++		ax /= a; ay /= a; bx /= b; by /= b;
++		mx = ax+bx;
++		my = ay+by;
++		m = (real)sqrt(mx*mx+my*my);
++		if (m<0.0001f)
++		{
++			mx = ax;
++			my = ay;
++		}
++		else
++		{
++			mx /= m;
++			my /= m;
++		}
++		cosine = MAX(mx*ax+my*ay, 0.2f);
++		result[index].x = point->x+mx*grow/cosine;
++		result[index].y = point->y+my*grow/cosine;
++	}
++}
++
++/* a band from the outline grown by inner to it grown by outer */
++static void hud_port_polygon_band(
++	real_point2d const *points,
++	short count,
++	real inner,
++	real outer,
++	pixel32 inner_color,
++	pixel32 outer_color)
++{
++	real_point2d inside[HUD_PORT_MAXIMUM_POINTS];
++	real_point2d outside[HUD_PORT_MAXIMUM_POINTS];
++	short index;
++
++	hud_port_polygon_grow(points, count, inner, inside);
++	hud_port_polygon_grow(points, count, outer, outside);
++	for (index = 0; index<count; index++)
++	{
++		short next = (index+1)%count;
++		real_point2d quad[4];
++		pixel32 colors[4];
++
++		quad[0] = inside[index];
++		quad[1] = outside[index];
++		quad[2] = outside[next];
++		quad[3] = inside[next];
++		colors[0] = colors[3] = inner_color;
++		colors[1] = colors[2] = outer_color;
++		hud_port_quad(quad, colors);
++	}
++}
++
++/* the part of a convex polygon where a*x+b*y <= c (at most count+1 points) */
++static short hud_port_polygon_clip(
++	real_point2d const *points,
++	short count,
++	real a,
++	real b,
++	real c,
++	real_point2d *result)
++{
++	short index;
++	short result_count = 0;
++
++	for (index = 0; index<count && result_count<HUD_PORT_MAXIMUM_POINTS-1; index++)
++	{
++		real_point2d const *point = &points[index];
++		real_point2d const *next = &points[(index+1)%count];
++		real here = a*point->x+b*point->y-c;
++		real there = a*next->x+b*next->y-c;
++
++		if (here<=0.0f)
++			result[result_count++] = *point;
++		if ((here<0.0f && there>0.0f) || (here>0.0f && there<0.0f))
++		{
++			real t = here/(here-there);
++
++			result[result_count].x = point->x+(next->x-point->x)*t;
++			result[result_count].y = point->y+(next->y-point->y)*t;
++			result_count++;
++		}
++	}
++	return result_count;
++}
++
++/* a panel: a soft glow around it, dark inside, its border light blue */
++static void hud_port_panel_polygon(
++	real_point2d const *points,
++	short count,
++	real s)
++{
++	hud_port_polygon_band(points, count, 0.0f, 3.5f*s, hud_port_color(0.28f, HUD_PORT_SHIELD),
++		hud_port_color(0.0f, HUD_PORT_SHIELD));
++	hud_port_polygon_fill(points, count, hud_port_color(0.5f, HUD_PORT_PANEL));
++	hud_port_polygon_band(points, count, -MAX(1.0f, 1.1f*s), 0.0f, hud_port_color(0.9f, HUD_PORT_BORDER),
++		hud_port_color(0.9f, HUD_PORT_BORDER));
++}
++
++/* a bar of a panel's inside lit from its left to the fraction fill, lighter
++at its top; the rest faint */
++static void hud_port_bar(
++	real_point2d const *inside,
++	short count,
++	real left,
++	real right,
++	real fill,
++	pixel32 rgb,
++	real alpha,
++	boolean faint_rest)
++{
++	real_point2d lit[HUD_PORT_MAXIMUM_POINTS];
++	real_point2d part[HUD_PORT_MAXIMUM_POINTS];
++	real_point2d top[HUD_PORT_MAXIMUM_POINTS];
++	real x = left+(right-left)*PIN(fill, 0.0f, 1.0f);
++	real middle_y;
++	short lit_count, part_count, top_count, index;
++
++	/* (the inside from left on) */
++	part_count = hud_port_polygon_clip(inside, count, -1.0f, 0.0f, -left, part);
++	if (faint_rest)
++	{
++		real_point2d rest[HUD_PORT_MAXIMUM_POINTS];
++		short rest_count = hud_port_polygon_clip(part, part_count, -1.0f, 0.0f, -x, rest);
++
++		hud_port_polygon_fill(rest, rest_count, hud_port_color(0.16f, rgb));
++	}
++	if (fill<=0.0f)
++		return;
++	lit_count = hud_port_polygon_clip(part, part_count, 1.0f, 0.0f, x, lit);
++	hud_port_polygon_fill(lit, lit_count, hud_port_color(alpha, rgb));
++	middle_y = 0.0f;
++	for (index = 0; index<lit_count; index++)
++		middle_y += lit[index].y;
++	if (lit_count>0)
++	{
++		real top_y = lit[0].y;
++
++		for (index = 1; index<lit_count; index++)
++			top_y = MIN(top_y, lit[index].y);
++		middle_y = top_y+(middle_y/lit_count-top_y)*0.8f;
++		top_count = hud_port_polygon_clip(lit, lit_count, 0.0f, 1.0f, middle_y, top);
++		hud_port_polygon_fill(top, top_count, hud_port_color(alpha*0.85f, hud_port_mix(rgb, 0xFFFFFF, 0.45f)));
++	}
++}
++
++/* a panel with cut ends, its points */
++static void hud_port_cut_panel(
++	real x,
++	real y,
++	real width,
++	real height,
++	real cut,
++	real_point2d *points)
++{
++	points[0].x = x+cut; points[0].y = y;
++	points[1].x = x+width-cut; points[1].y = y;
++	points[2].x = x+width; points[2].y = y+height*0.5f;
++	points[3].x = x+width-cut; points[3].y = y+height;
++	points[4].x = x+cut; points[4].y = y+height;
++	points[5].x = x; points[5].y = y+height*0.5f;
++}
++
++/* a line, thickness wide */
++static void hud_port_line(
++	real x0,
++	real y0,
++	real x1,
++	real y1,
++	real thickness,
++	pixel32 color)
++{
++	real dx = x1-x0, dy = y1-y0;
++	real length = (real)sqrt(dx*dx+dy*dy);
++	real_point2d quad[4];
++	pixel32 colors[4];
++	real nx, ny;
++
++	if (length<0.0001f)
++		return;
++	nx = -dy/length*thickness*0.5f;
++	ny = dx/length*thickness*0.5f;
++	quad[0].x = x0+nx; quad[0].y = y0+ny;
++	quad[1].x = x1+nx; quad[1].y = y1+ny;
++	quad[2].x = x1-nx; quad[2].y = y1-ny;
++	quad[3].x = x0-nx; quad[3].y = y0-ny;
++	colors[0] = colors[1] = colors[2] = colors[3] = color;
++	hud_port_quad(quad, colors);
++}
++
++/* the window's edges in the view's pixels */
++static void hud_port_window(
++	real *x0,
++	real *y0,
++	real *x1)
++{
++	*x0 = (real)(render.camera.window_bounds.x0-render.camera.viewport_bounds.x0);
++	*y0 = (real)(render.camera.window_bounds.y0-render.camera.viewport_bounds.y0);
++	*x1 = (real)(render.camera.window_bounds.x1-render.camera.viewport_bounds.x0);
++}
++
++/* (hud_unit.c) the shield and the health, each negative when not shown */
++void hud_port_style_unit(
++	short local_player_index,
++	real shield_vitality,
++	real body_vitality)
++{
++	short part = hud_port_part;
++	real s = hud_globals_get_scale(local_player_count()>1);
++	real window_x0, window_y0, window_x1, middle;
++
++	if (!hud_port_style_modern())
++		return;
++	if (s<=0.0f)
++		s = 1.0f;
++	hud_port_window(&window_x0, &window_y0, &window_x1);
++	middle = (window_x0+window_x1)*0.5f;
++
++	if (shield_vitality>=0.0f)
++	{
++		real width = 200.0f*s, height = 14.0f*s, cut = 7.0f*s;
++		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_shield, 0)*s;
++		real y = window_y0+12.0f*s+hud_port_offset(_hud_port_part_shield, 1)*s;
++		real line = MAX(1.0f, 0.9f*s);
++		pixel32 lines = hud_port_color(0.6f, HUD_PORT_BORDER);
++		real_point2d points[6], inside[6];
++		real alpha = shield_vitality<0.25f && hud_port_blink_off() ? 0.35f : 1.0f;
++
++		hud_port_part = _hud_port_part_shield;
++		/* (the lines out to the sides) */
++		hud_port_line(x-2.0f*s, y+height*0.5f, x-60.0f*s, y+height*0.5f, line, lines);
++		hud_port_line(x-60.0f*s, y+height*0.5f, x-78.0f*s, y+height*0.5f-9.0f*s, line, lines);
++		hud_port_line(x+width+2.0f*s, y+height*0.5f, x+width+60.0f*s, y+height*0.5f, line, lines);
++		hud_port_line(x+width+60.0f*s, y+height*0.5f, x+width+78.0f*s, y+height*0.5f-9.0f*s, line, lines);
++		hud_port_cut_panel(x, y, width, height, cut, points);
++		hud_port_panel_polygon(points, 6, s);
++		hud_port_polygon_grow(points, 6, -3.0f*s, inside);
++		hud_port_bar(inside, 6, x+3.0f*s, x+width-3.0f*s, MIN(shield_vitality, 1.0f), HUD_PORT_SHIELD, alpha, TRUE);
++		if (shield_vitality>1.0f)
++		{
++			hud_port_bar(inside, 6, x+3.0f*s, x+width-3.0f*s, MIN((shield_vitality-1.0f)/2.0f, 1.0f),
++				HUD_PORT_OVERSHIELD, 1.0f, FALSE);
++		}
++	}
++
++	if (body_vitality>=0.0f)
++	{
++		real width = 90.0f*s, height = 10.0f*s, cut = 5.0f*s;
++		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_health, 0)*s;
++		real y = window_y0+31.0f*s+hud_port_offset(_hud_port_part_health, 1)*s;
++		boolean low = body_vitality<0.3f;
++		pixel32 rgb = low ? HUD_PORT_LOW : HUD_PORT_HEALTH;
++		real alpha = body_vitality<0.25f && hud_port_blink_off() ? 0.35f : 1.0f;
++		real cross_x = x+11.0f*s, cross_y = y+height*0.5f;
++		real_point2d points[6], inside[6];
++
++		hud_port_part = _hud_port_part_health;
++		hud_port_cut_panel(x, y, width, height, cut, points);
++		hud_port_panel_polygon(points, 6, s);
++		/* (the cross) */
++		hud_port_rectangle(cross_x-3.5f*s, cross_y-1.0f*s, 7.0f*s, 2.0f*s, hud_port_color(1.0f, rgb));
++		hud_port_rectangle(cross_x-1.0f*s, cross_y-3.5f*s, 2.0f*s, 7.0f*s, hud_port_color(1.0f, rgb));
++		hud_port_polygon_grow(points, 6, -2.5f*s, inside);
++		hud_port_bar(inside, 6, x+19.0f*s, x+width-4.0f*s, body_vitality, rgb, alpha, TRUE);
++	}
++
++	hud_port_part = part;
++}
++
++/* (hud_unit.c) the radar's panel, under its blips: centred on the blips'
++centre */
++void hud_port_radar_panel(
++	short local_player_index,
++	point2d const *center,
++	real radius_units)
++{
++	real s = hud_globals_get_scale(local_player_count()>1);
++	real r, half, cut, x, y, line;
++	real_point2d points[8];
++	pixel32 faint;
++
++	if (!hud_port_style_modern() || !center)
++		return;
++	if (s<=0.0f)
++		s = 1.0f;
++	if (radius_units<15.0f || radius_units>120.0f)
++		radius_units = 46.0f;
++	r = radius_units*s;
++	half = r*1.18f;
++	cut = half*0.32f;
++	x = (real)center->x;
++	y = (real)center->y;
++	line = MAX(1.0f, 0.9f*s);
++	faint = hud_port_color(0.3f, HUD_PORT_BORDER);
++
++	points[0].x = x-half+cut; points[0].y = y-half;
++	points[1].x = x+half-cut; points[1].y = y-half;
++	points[2].x = x+half; points[2].y = y-half+cut;
++	points[3].x = x+half; points[3].y = y+half-cut;
++	points[4].x = x+half-cut; points[4].y = y+half;
++	points[5].x = x-half+cut; points[5].y = y+half;
++	points[6].x = x-half; points[6].y = y+half-cut;
++	points[7].x = x-half; points[7].y = y-half+cut;
++	hud_port_panel_polygon(points, 8, s);
++
++	/* the rings, the cross and the ticks at the panel's sides */
++	hud_port_ring(x, y, r, 1.4f*line, hud_port_color(0.55f, HUD_PORT_BORDER), 32);
++	hud_port_ring(x, y, r*0.66f, line, faint, 24);
++	hud_port_ring(x, y, r*0.33f, line, faint, 16);
++	hud_port_line(x-r, y, x+r, y, line, hud_port_color(0.22f, HUD_PORT_BORDER));
++	hud_port_line(x, y-r, x, y+r, line, hud_port_color(0.22f, HUD_PORT_BORDER));
++	hud_port_line(x, y-half+1.0f*s, x, y-half+6.0f*s, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
++	hud_port_line(x, y+half-1.0f*s, x, y+half-6.0f*s, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
++	hud_port_line(x-half+1.0f*s, y, x-half+6.0f*s, y, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
++	hud_port_line(x+half-1.0f*s, y, x+half-6.0f*s, y, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
++
++	/* the player's arrow */
++	{
++		real_point2d arrow[4];
++		pixel32 colors[4];
++
++		arrow[0].x = x; arrow[0].y = y-6.0f*s;
++		arrow[1].x = x+5.0f*s; arrow[1].y = y+4.0f*s;
++		arrow[2].x = x-5.0f*s; arrow[2].y = y+4.0f*s;
++		arrow[3] = arrow[0];
++		colors[0] = colors[1] = colors[2] = colors[3] = hud_port_color(0.95f, HUD_PORT_LIGHT);
++		hud_port_quad(arrow, colors);
++	}
++}
++
 +void hud_port_radar_sweep(
 +	short local_player_index,
 +	point2d const *center,
@@ -1029,7 +1484,12 @@
 +		hud_port_quad(points, colors);
 +	}
 +
-+	/* the cross and the rings */
++	/* the cross and the rings (the modern style's panel has its own) */
++	if (hud_port_style_modern())
++	{
++		hud_port_part = part;
++		return;
++	}
 +	hud_port_rectangle(x-r, y-line/2, 2*r, line, hud_port_color(0.2f, HUD_PORT_ACCENT));
 +	hud_port_rectangle(x-line/2, y-r, line, 2*r, hud_port_color(0.2f, HUD_PORT_ACCENT));
 +	hud_port_ring(x, y, r*0.5f, line, hud_port_color(0.3f, HUD_PORT_ACCENT), 16);
@@ -1042,7 +1502,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1067,6 +1449,12 @@
+@@ -1067,6 +1896,12 @@
  			placement->offset.y * scale;
  	}
  
@@ -1055,7 +1515,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1590,6 +1978,8 @@
+@@ -1590,6 +2425,8 @@
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
@@ -1066,7 +1526,7 @@
  	{
 --- a/source/interface/hud_draw.h
 +++ b/source/interface/hud_draw.h
-@@ -71,6 +71,44 @@
+@@ -71,6 +71,56 @@
  pixel32 real_alpha_intensity_to_pixel32(
  	real alpha,
  	real intensity);
@@ -1107,6 +1567,18 @@
 +	short local_player_index,
 +	point2d const *center,
 +	real radius_units);
++/* port: the modern HUD (TRUCOS, HUD: ESTILO, hud.modern): the shield, the
++health and the radar's panel drawn in place of the map's (hud_unit.c) */
++boolean hud_port_style_modern(
++	void);
++void hud_port_style_unit(
++	short local_player_index,
++	real shield_vitality,
++	real body_vitality);
++void hud_port_radar_panel(
++	short local_player_index,
++	point2d const *center,
++	real radius_units);
 +
  void hud_calculate_point(
  	short local_player_index,
@@ -1121,23 +1593,55 @@
  
  	if (player->local_player_index == render.local_player_index &&
  		player->unit_index != NONE)
-@@ -909,6 +910,7 @@
+@@ -909,7 +910,14 @@
  				struct unit_hud_interface_definition *hud_definition =
  					unit_hud_interface_definition_get(unit_hud_indices[unit_count]);
  
+-				if (hud_definition->background.interface_bitmap.index != NONE)
++				/* port: the modern HUD draws the player's own shield and health
++				itself (hud_draw.c: hud_port_style_unit); a vehicle's are the map's */
++				boolean port_styled = unit_count == 0 &&
++					unit_indices[unit_count] == player_get(player_index)->unit_index &&
++					hud_port_style_modern();
++
 +				hud_port_part = _hud_port_part_shield;
- 				if (hud_definition->background.interface_bitmap.index != NONE)
++				if (!port_styled && hud_definition->background.interface_bitmap.index != NONE)
  				{
  					short draw_flags = 0;
-@@ -1049,6 +1051,7 @@
+ 
+@@ -929,7 +937,8 @@
+ 						NONE);
+ 				}
+ 
+-				if (game_engine_has_shield(player_index) &&
++				if (!port_styled &&
++					game_engine_has_shield(player_index) &&
+ 					!TEST_FLAG(
+ 						unit_hud_globals->script_flags,
+ 						_hud_panel_shield_dont_show_bit))
+@@ -1049,7 +1058,20 @@
  					}
  				}
  
+-				if (!TEST_FLAG(
 +				hud_port_part = _hud_port_part_health;
- 				if (!TEST_FLAG(
++				if (port_styled)
++				{
++					hud_port_style_unit(
++						local_player_index,
++						game_engine_has_shield(player_index) &&
++							!TEST_FLAG(unit_hud_globals->script_flags, _hud_panel_shield_dont_show_bit) &&
++							!TEST_FLAG(hud_unit->object.damage_flags, _object_dead_bit) ?
++							hud_unit->object.shield_vitality : -1.0f,
++						!TEST_FLAG(unit_hud_globals->script_flags, _hud_panel_health_dont_show_bit) &&
++							!TEST_FLAG(hud_unit->object.damage_flags, _object_dead_bit) ?
++							hud_unit->object.body_vitality : -1.0f);
++				}
++				if (!port_styled && !TEST_FLAG(
  					unit_hud_globals->script_flags,
  					_hud_panel_health_dont_show_bit))
-@@ -1140,6 +1143,7 @@
+ 				{
+@@ -1140,6 +1162,7 @@
  					hud_state->last_body_vitality = hud_unit->object.body_vitality;
  				}
  
@@ -1145,7 +1649,37 @@
  				if (unit_count == 0 &&
  					!TEST_FLAG(
  						unit_hud_globals->script_flags,
-@@ -1209,6 +1213,11 @@
+@@ -1174,7 +1197,9 @@
+ 						hud_state->last_motion_sensor_flash_time = NONE;
+ 					}
+ 
+-					if (hud_definition->motion_sensor.background.interface_bitmap.index != NONE)
++					/* port: (the modern HUD's panel in place of its pictures) */
++					if (!hud_port_style_modern() &&
++						hud_definition->motion_sensor.background.interface_bitmap.index != NONE)
+ 					{
+ 						/* port: none, unless it is drawn (its bitmap can be missing) */
+ 						hud_draw_last_left = NONE;
+@@ -1187,7 +1212,8 @@
+ 						/* port: where it is (the text chat goes above it) */
+ 						motion_sensor_left = hud_draw_last_left;
+ 					}
+-					if (hud_definition->motion_sensor.foreground.interface_bitmap.index != NONE)
++					if (!hud_port_style_modern() &&
++						hud_definition->motion_sensor.foreground.interface_bitmap.index != NONE)
+ 					{
+ 						hud_draw_static_element(
+ 							local_player_index,
+@@ -1205,10 +1231,20 @@
+ 						local_player_count() > 1,
+ 						0.0f,
+ 						&corner);
++					/* port: the modern HUD's panel under the blips */
++					hud_port_radar_panel(
++						local_player_index,
++						&corner,
++						hud_globals->defaults.motion_sensor_scale);
+ 					motion_sensor_draw_screen(
  						local_player_index,
  						local_player_count() > 1,
  						&corner);
@@ -1157,7 +1691,7 @@
  					/* port: the text chat goes above it: the top of its circle, as
  					far above the blips' centre as the picture's left edge is left
  					of it (the picture is taller than the circle) */
-@@ -1219,6 +1228,7 @@
+@@ -1219,6 +1255,7 @@
  					}
  				}
  
