@@ -672,7 +672,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -999,6 +1005,896 @@
+@@ -999,6 +1005,913 @@
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -920,15 +920,27 @@
 +	struct rasterizer_dynamic_screen_geometry_parameters parameters;
 +	struct dynamic_screen_vertex vertices[4];
 +	short vertex_index;
++	real area = 0.0f;
 +
 +	if (!map)
 +		return;
++	/* (around clockwise on the screen, as the rasterizer draws them: the other
++	way round is not drawn) */
 +	for (vertex_index = 0; vertex_index<4; vertex_index++)
 +	{
-+		vertices[vertex_index].position = points[vertex_index];
++		real_point2d const *point = &points[vertex_index];
++		real_point2d const *next = &points[(vertex_index+1)&3];
++
++		area += point->x*next->y-next->x*point->y;
++	}
++	for (vertex_index = 0; vertex_index<4; vertex_index++)
++	{
++		short source = area<0.0f ? (4-vertex_index)&3 : vertex_index;
++
++		vertices[vertex_index].position = points[source];
 +		vertices[vertex_index].texture_coordinates.x = 0.5f;
 +		vertices[vertex_index].texture_coordinates.y = 0.5f;
-+		vertices[vertex_index].color = colors[vertex_index];
++		vertices[vertex_index].color = colors[source];
 +	}
 +	csmemset(&parameters, 0, sizeof(parameters));
 +	parameters.map_texture_scale[0].i = 1.0f;
@@ -1248,9 +1260,9 @@
 +
 +		for (index = 1; index<lit_count; index++)
 +			top_y = MIN(top_y, lit[index].y);
-+		middle_y = top_y+(middle_y/lit_count-top_y)*0.8f;
++		middle_y = top_y+(middle_y/lit_count-top_y)*0.55f;
 +		top_count = hud_port_polygon_clip(lit, lit_count, 0.0f, 1.0f, middle_y, top);
-+		hud_port_polygon_fill(top, top_count, hud_port_color(alpha*0.85f, hud_port_mix(rgb, 0xFFFFFF, 0.45f)));
++		hud_port_polygon_fill(top, top_count, hud_port_color(alpha*0.7f, hud_port_mix(rgb, 0xFFFFFF, 0.3f)));
 +	}
 +}
 +
@@ -1370,7 +1382,7 @@
 +
 +	if (shield_vitality>=0.0f)
 +	{
-+		real width = 200.0f*s, height = 16.0f*s, cut = 8.0f*s;
++		real width = 204.0f*s, height = 20.0f*s, cut = 10.0f*s;
 +		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_shield, 0)*s;
 +		real y = window_y0+12.0f*s+hud_port_offset(_hud_port_part_shield, 1)*s;
 +		real line = MAX(1.0f, 0.9f*s);
@@ -1385,25 +1397,30 @@
 +			real line_y = y+height*0.5f;
 +			real reach = MAX(60.0f*s, MIN(x-window_x0, window_x1-(x+width))-30.0f*s);
 +
++			/* (not part of the shield's box in the touch editor: their length
++			follows where it is) */
++			hud_port_part = _hud_port_part_none;
++
 +			hud_port_line(x-2.0f*s, line_y, x-40.0f*s, line_y, line, lines);
 +			hud_port_line_fade(x-40.0f*s, line_y, x-reach, line_y-10.0f*s, line, lines,
 +				hud_port_color(0.0f, HUD_PORT_BORDER));
 +			hud_port_line(x+width+2.0f*s, line_y, x+width+40.0f*s, line_y, line, lines);
 +			hud_port_line_fade(x+width+40.0f*s, line_y, x+width+reach, line_y-10.0f*s, line, lines,
 +				hud_port_color(0.0f, HUD_PORT_BORDER));
++			hud_port_part = _hud_port_part_shield;
 +		}
 +		hud_port_cut_panel(x, y, width, height, cut, points);
 +		hud_port_panel_polygon(points, 6, s);
 +		/* (a second thin line outside the frame, as a visor's) */
 +		hud_port_polygon_band(points, 6, 2.5f*s, 2.5f*s+line, hud_port_color(0.5f, HUD_PORT_BORDER),
 +			hud_port_color(0.5f, HUD_PORT_BORDER));
-+		hud_port_polygon_grow(points, 6, -3.5f*s, inside);
-+		hud_port_bar(inside, 6, x+3.5f*s, x+width-3.5f*s, MIN(shield_vitality, 1.0f), HUD_PORT_SHIELD, alpha, TRUE,
-+			2.5f*s);
++		hud_port_polygon_grow(points, 6, -3.0f*s, inside);
++		hud_port_bar(inside, 6, x+3.0f*s, x+width-3.0f*s, MIN(shield_vitality, 1.0f), HUD_PORT_SHIELD, alpha, TRUE,
++			3.0f*s);
 +		if (shield_vitality>1.0f)
 +		{
-+			hud_port_bar(inside, 6, x+3.5f*s, x+width-3.5f*s, MIN((shield_vitality-1.0f)/2.0f, 1.0f),
-+				HUD_PORT_OVERSHIELD, 1.0f, FALSE, 2.5f*s);
++			hud_port_bar(inside, 6, x+3.0f*s, x+width-3.0f*s, MIN((shield_vitality-1.0f)/2.0f, 1.0f),
++				HUD_PORT_OVERSHIELD, 1.0f, FALSE, 3.0f*s);
 +		}
 +	}
 +
@@ -1411,7 +1428,7 @@
 +	{
 +		real width = 90.0f*s, height = 13.0f*s, cut = 6.0f*s;
 +		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_health, 0)*s;
-+		real y = window_y0+33.0f*s+hud_port_offset(_hud_port_part_health, 1)*s;
++		real y = window_y0+37.0f*s+hud_port_offset(_hud_port_part_health, 1)*s;
 +		boolean low = body_vitality<0.3f;
 +		pixel32 rgb = low ? HUD_PORT_LOW : HUD_PORT_HEALTH;
 +		real alpha = body_vitality<0.25f && hud_port_blink_off() ? 0.35f : 1.0f;
@@ -1569,7 +1586,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1067,6 +1963,12 @@
+@@ -1067,6 +1980,12 @@
  			placement->offset.y * scale;
  	}
  
@@ -1582,7 +1599,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1590,6 +2492,8 @@
+@@ -1590,6 +2509,8 @@
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
