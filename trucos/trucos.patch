@@ -672,7 +672,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -999,6 +1005,888 @@
+@@ -999,6 +1005,896 @@
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -1004,7 +1004,7 @@
 +the HUD's units (the tags' 640x480). */
 +
 +#define HUD_PORT_PANEL 0x06121E
-+#define HUD_PORT_SHIELD 0x4CC9FF
++#define HUD_PORT_SHIELD 0x33C4FF
 +#define HUD_PORT_BORDER 0x7FD8FF
 +#define HUD_PORT_HEALTH 0x4FE3C8
 +#define HUD_PORT_LOW 0xFF5A4A
@@ -1213,7 +1213,8 @@
 +	real fill,
 +	pixel32 rgb,
 +	real alpha,
-+	boolean faint_rest)
++	boolean faint_rest,
++	real glow)
 +{
 +	real_point2d lit[HUD_PORT_MAXIMUM_POINTS];
 +	real_point2d part[HUD_PORT_MAXIMUM_POINTS];
@@ -1234,6 +1235,9 @@
 +	if (fill<=0.0f)
 +		return;
 +	lit_count = hud_port_polygon_clip(part, part_count, 1.0f, 0.0f, x, lit);
++	/* (a soft glow around the lit part, so that it shines) */
++	if (glow>0.0f)
++		hud_port_polygon_band(lit, lit_count, 0.0f, glow, hud_port_color(alpha*0.45f, rgb), hud_port_color(0.0f, rgb));
 +	hud_port_polygon_fill(lit, lit_count, hud_port_color(alpha, rgb));
 +	middle_y = 0.0f;
 +	for (index = 0; index<lit_count; index++)
@@ -1366,7 +1370,7 @@
 +
 +	if (shield_vitality>=0.0f)
 +	{
-+		real width = 200.0f*s, height = 14.0f*s, cut = 7.0f*s;
++		real width = 200.0f*s, height = 16.0f*s, cut = 8.0f*s;
 +		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_shield, 0)*s;
 +		real y = window_y0+12.0f*s+hud_port_offset(_hud_port_part_shield, 1)*s;
 +		real line = MAX(1.0f, 0.9f*s);
@@ -1390,12 +1394,16 @@
 +		}
 +		hud_port_cut_panel(x, y, width, height, cut, points);
 +		hud_port_panel_polygon(points, 6, s);
-+		hud_port_polygon_grow(points, 6, -3.0f*s, inside);
-+		hud_port_bar(inside, 6, x+3.0f*s, x+width-3.0f*s, MIN(shield_vitality, 1.0f), HUD_PORT_SHIELD, alpha, TRUE);
++		/* (a second thin line outside the frame, as a visor's) */
++		hud_port_polygon_band(points, 6, 2.5f*s, 2.5f*s+line, hud_port_color(0.5f, HUD_PORT_BORDER),
++			hud_port_color(0.5f, HUD_PORT_BORDER));
++		hud_port_polygon_grow(points, 6, -3.5f*s, inside);
++		hud_port_bar(inside, 6, x+3.5f*s, x+width-3.5f*s, MIN(shield_vitality, 1.0f), HUD_PORT_SHIELD, alpha, TRUE,
++			2.5f*s);
 +		if (shield_vitality>1.0f)
 +		{
-+			hud_port_bar(inside, 6, x+3.0f*s, x+width-3.0f*s, MIN((shield_vitality-1.0f)/2.0f, 1.0f),
-+				HUD_PORT_OVERSHIELD, 1.0f, FALSE);
++			hud_port_bar(inside, 6, x+3.5f*s, x+width-3.5f*s, MIN((shield_vitality-1.0f)/2.0f, 1.0f),
++				HUD_PORT_OVERSHIELD, 1.0f, FALSE, 2.5f*s);
 +		}
 +	}
 +
@@ -1403,7 +1411,7 @@
 +	{
 +		real width = 90.0f*s, height = 13.0f*s, cut = 6.0f*s;
 +		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_health, 0)*s;
-+		real y = window_y0+30.0f*s+hud_port_offset(_hud_port_part_health, 1)*s;
++		real y = window_y0+33.0f*s+hud_port_offset(_hud_port_part_health, 1)*s;
 +		boolean low = body_vitality<0.3f;
 +		pixel32 rgb = low ? HUD_PORT_LOW : HUD_PORT_HEALTH;
 +		real alpha = body_vitality<0.25f && hud_port_blink_off() ? 0.35f : 1.0f;
@@ -1417,7 +1425,7 @@
 +		hud_port_rectangle(cross_x-4.0f*s, cross_y-1.2f*s, 8.0f*s, 2.4f*s, hud_port_color(1.0f, rgb));
 +		hud_port_rectangle(cross_x-1.2f*s, cross_y-4.0f*s, 2.4f*s, 8.0f*s, hud_port_color(1.0f, rgb));
 +		hud_port_polygon_grow(points, 6, -3.0f*s, inside);
-+		hud_port_bar(inside, 6, x+20.0f*s, x+width-4.0f*s, body_vitality, rgb, alpha, TRUE);
++		hud_port_bar(inside, 6, x+20.0f*s, x+width-4.0f*s, body_vitality, rgb, alpha, TRUE, 1.5f*s);
 +	}
 +
 +	hud_port_part = part;
@@ -1561,7 +1569,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1067,6 +1955,12 @@
+@@ -1067,6 +1963,12 @@
  			placement->offset.y * scale;
  	}
  
@@ -1574,7 +1582,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1590,6 +2484,8 @@
+@@ -1590,6 +2492,8 @@
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
