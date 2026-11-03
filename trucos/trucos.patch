@@ -672,7 +672,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -999,6 +1005,829 @@
+@@ -999,6 +1005,888 @@
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -1294,6 +1294,48 @@
 +	hud_port_quad(quad, colors);
 +}
 +
++/* a line from color_start to color_end */
++static void hud_port_line_fade(
++	real x0,
++	real y0,
++	real x1,
++	real y1,
++	real thickness,
++	pixel32 color_start,
++	pixel32 color_end)
++{
++	real dx = x1-x0, dy = y1-y0;
++	real length = (real)sqrt(dx*dx+dy*dy);
++	real_point2d quad[4];
++	pixel32 colors[4];
++	real nx, ny;
++
++	if (length<0.0001f)
++		return;
++	nx = -dy/length*thickness*0.5f;
++	ny = dx/length*thickness*0.5f;
++	quad[0].x = x0+nx; quad[0].y = y0+ny;
++	quad[1].x = x1+nx; quad[1].y = y1+ny;
++	quad[2].x = x1-nx; quad[2].y = y1-ny;
++	quad[3].x = x0-nx; quad[3].y = y0-ny;
++	colors[0] = colors[3] = color_start;
++	colors[1] = colors[2] = color_end;
++	hud_port_quad(quad, colors);
++}
++
++/* a ring with a soft glow: a wide faint band, then its line */
++static void hud_port_soft_ring(
++	real x,
++	real y,
++	real radius,
++	real line,
++	real alpha,
++	short segment_count)
++{
++	hud_port_ring(x, y, radius, line*3.0f, hud_port_color(alpha*0.22f, HUD_PORT_SHIELD), segment_count);
++	hud_port_ring(x, y, radius, line, hud_port_color(alpha, HUD_PORT_BORDER), segment_count);
++}
++
 +/* the window's edges in the view's pixels */
 +static void hud_port_window(
 +	real *x0,
@@ -1333,11 +1375,19 @@
 +		real alpha = shield_vitality<0.25f && hud_port_blink_off() ? 0.35f : 1.0f;
 +
 +		hud_port_part = _hud_port_part_shield;
-+		/* (the lines out to the sides) */
-+		hud_port_line(x-2.0f*s, y+height*0.5f, x-60.0f*s, y+height*0.5f, line, lines);
-+		hud_port_line(x-60.0f*s, y+height*0.5f, x-78.0f*s, y+height*0.5f-9.0f*s, line, lines);
-+		hud_port_line(x+width+2.0f*s, y+height*0.5f, x+width+60.0f*s, y+height*0.5f, line, lines);
-+		hud_port_line(x+width+60.0f*s, y+height*0.5f, x+width+78.0f*s, y+height*0.5f-9.0f*s, line, lines);
++		/* (the visor's lines out to the sides: straight a little, then rising
++		and fading toward the window's edges) */
++		{
++			real line_y = y+height*0.5f;
++			real reach = MAX(60.0f*s, MIN(x-window_x0, window_x1-(x+width))-30.0f*s);
++
++			hud_port_line(x-2.0f*s, line_y, x-40.0f*s, line_y, line, lines);
++			hud_port_line_fade(x-40.0f*s, line_y, x-reach, line_y-10.0f*s, line, lines,
++				hud_port_color(0.0f, HUD_PORT_BORDER));
++			hud_port_line(x+width+2.0f*s, line_y, x+width+40.0f*s, line_y, line, lines);
++			hud_port_line_fade(x+width+40.0f*s, line_y, x+width+reach, line_y-10.0f*s, line, lines,
++				hud_port_color(0.0f, HUD_PORT_BORDER));
++		}
 +		hud_port_cut_panel(x, y, width, height, cut, points);
 +		hud_port_panel_polygon(points, 6, s);
 +		hud_port_polygon_grow(points, 6, -3.0f*s, inside);
@@ -1351,9 +1401,9 @@
 +
 +	if (body_vitality>=0.0f)
 +	{
-+		real width = 90.0f*s, height = 10.0f*s, cut = 5.0f*s;
++		real width = 90.0f*s, height = 13.0f*s, cut = 6.0f*s;
 +		real x = middle-width*0.5f+hud_port_offset(_hud_port_part_health, 0)*s;
-+		real y = window_y0+31.0f*s+hud_port_offset(_hud_port_part_health, 1)*s;
++		real y = window_y0+30.0f*s+hud_port_offset(_hud_port_part_health, 1)*s;
 +		boolean low = body_vitality<0.3f;
 +		pixel32 rgb = low ? HUD_PORT_LOW : HUD_PORT_HEALTH;
 +		real alpha = body_vitality<0.25f && hud_port_blink_off() ? 0.35f : 1.0f;
@@ -1364,10 +1414,10 @@
 +		hud_port_cut_panel(x, y, width, height, cut, points);
 +		hud_port_panel_polygon(points, 6, s);
 +		/* (the cross) */
-+		hud_port_rectangle(cross_x-3.5f*s, cross_y-1.0f*s, 7.0f*s, 2.0f*s, hud_port_color(1.0f, rgb));
-+		hud_port_rectangle(cross_x-1.0f*s, cross_y-3.5f*s, 2.0f*s, 7.0f*s, hud_port_color(1.0f, rgb));
-+		hud_port_polygon_grow(points, 6, -2.5f*s, inside);
-+		hud_port_bar(inside, 6, x+19.0f*s, x+width-4.0f*s, body_vitality, rgb, alpha, TRUE);
++		hud_port_rectangle(cross_x-4.0f*s, cross_y-1.2f*s, 8.0f*s, 2.4f*s, hud_port_color(1.0f, rgb));
++		hud_port_rectangle(cross_x-1.2f*s, cross_y-4.0f*s, 2.4f*s, 8.0f*s, hud_port_color(1.0f, rgb));
++		hud_port_polygon_grow(points, 6, -3.0f*s, inside);
++		hud_port_bar(inside, 6, x+20.0f*s, x+width-4.0f*s, body_vitality, rgb, alpha, TRUE);
 +	}
 +
 +	hud_port_part = part;
@@ -1383,7 +1433,6 @@
 +	real s = hud_globals_get_scale(local_player_count()>1);
 +	real r, half, cut, x, y, line;
 +	real_point2d points[8];
-+	pixel32 faint;
 +
 +	if (!hud_port_style_modern() || !center)
 +		return;
@@ -1397,7 +1446,6 @@
 +	x = (real)center->x;
 +	y = (real)center->y;
 +	line = MAX(1.0f, 0.9f*s);
-+	faint = hud_port_color(0.3f, HUD_PORT_BORDER);
 +
 +	points[0].x = x-half+cut; points[0].y = y-half;
 +	points[1].x = x+half-cut; points[1].y = y-half;
@@ -1408,29 +1456,40 @@
 +	points[6].x = x-half; points[6].y = y+half-cut;
 +	points[7].x = x-half; points[7].y = y-half+cut;
 +	hud_port_panel_polygon(points, 8, s);
++	/* (a second, thin border inside, and the middle a little lighter) */
++	hud_port_polygon_band(points, 8, -3.6f*s, -3.6f*s+MAX(1.0f, 0.7f*s), hud_port_color(0.35f, HUD_PORT_BORDER),
++		hud_port_color(0.35f, HUD_PORT_BORDER));
++	{
++		real_point2d middle[8];
 +
-+	/* the rings, the cross and the ticks at the panel's sides */
-+	hud_port_ring(x, y, r, 1.4f*line, hud_port_color(0.55f, HUD_PORT_BORDER), 32);
-+	hud_port_ring(x, y, r*0.66f, line, faint, 24);
-+	hud_port_ring(x, y, r*0.33f, line, faint, 16);
-+	hud_port_line(x-r, y, x+r, y, line, hud_port_color(0.22f, HUD_PORT_BORDER));
-+	hud_port_line(x, y-r, x, y+r, line, hud_port_color(0.22f, HUD_PORT_BORDER));
++		hud_port_polygon_grow(points, 8, -half*0.45f, middle);
++		hud_port_polygon_fill(middle, 8, hud_port_color(0.08f, HUD_PORT_SHIELD));
++	}
++
++	/* the rings (smooth, with a soft glow), the cross and the ticks at the
++	panel's sides */
++	hud_port_soft_ring(x, y, r, 1.2f*line, 0.6f, 64);
++	hud_port_soft_ring(x, y, r*0.66f, 0.8f*line, 0.32f, 48);
++	hud_port_soft_ring(x, y, r*0.33f, 0.8f*line, 0.32f, 32);
++	hud_port_line_fade(x, y, x-r, y, 0.8f*line, hud_port_color(0.3f, HUD_PORT_BORDER), hud_port_color(0.05f, HUD_PORT_BORDER));
++	hud_port_line_fade(x, y, x+r, y, 0.8f*line, hud_port_color(0.3f, HUD_PORT_BORDER), hud_port_color(0.05f, HUD_PORT_BORDER));
++	hud_port_line_fade(x, y, x, y-r, 0.8f*line, hud_port_color(0.3f, HUD_PORT_BORDER), hud_port_color(0.05f, HUD_PORT_BORDER));
++	hud_port_line_fade(x, y, x, y+r, 0.8f*line, hud_port_color(0.3f, HUD_PORT_BORDER), hud_port_color(0.05f, HUD_PORT_BORDER));
 +	hud_port_line(x, y-half+1.0f*s, x, y-half+6.0f*s, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
 +	hud_port_line(x, y+half-1.0f*s, x, y+half-6.0f*s, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
 +	hud_port_line(x-half+1.0f*s, y, x-half+6.0f*s, y, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
 +	hud_port_line(x+half-1.0f*s, y, x+half-6.0f*s, y, 1.5f*line, hud_port_color(0.9f, HUD_PORT_BORDER));
 +
-+	/* the player's arrow */
++	/* the player's arrow, with a halo */
 +	{
-+		real_point2d arrow[4];
-+		pixel32 colors[4];
++		real_point2d arrow[3];
 +
 +		arrow[0].x = x; arrow[0].y = y-6.0f*s;
 +		arrow[1].x = x+5.0f*s; arrow[1].y = y+4.0f*s;
 +		arrow[2].x = x-5.0f*s; arrow[2].y = y+4.0f*s;
-+		arrow[3] = arrow[0];
-+		colors[0] = colors[1] = colors[2] = colors[3] = hud_port_color(0.95f, HUD_PORT_LIGHT);
-+		hud_port_quad(arrow, colors);
++		hud_port_polygon_band(arrow, 3, 0.0f, 2.5f*s, hud_port_color(0.45f, HUD_PORT_SHIELD),
++			hud_port_color(0.0f, HUD_PORT_SHIELD));
++		hud_port_polygon_fill(arrow, 3, hud_port_color(0.95f, HUD_PORT_LIGHT));
 +	}
 +}
 +
@@ -1502,7 +1561,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1067,6 +1896,12 @@
+@@ -1067,6 +1955,12 @@
  			placement->offset.y * scale;
  	}
  
@@ -1515,7 +1574,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1590,6 +2425,8 @@
+@@ -1590,6 +2484,8 @@
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
