@@ -91,8 +91,18 @@ La forma más fácil es **con el dedo**: en partida toca **Options > Edit button
 
 También se puede ajustar con números en **TRUCOS > HUD**, que tiene una pantalla para cada parte. Cada una se mueve en horizontal y vertical con un ajuste **grueso** (de 100 en 100, hasta ±1000) y uno **fino** (de 5 en 5, se suma al grueso): por ejemplo, 625 es 600 y +25. Un número positivo mueve a la derecha o hacia abajo; 0 deja cada parte donde el juego la pone. Lo que mueves con el dedo aparece ahí también. La mira no se puede mover.
 
+### HUD moderno (opcional)
+En **TRUCOS > HUD: ESTILO > HUD MODERNO: ON** el HUD cambia a un estilo como el de los Halo recientes:
+
+- **Escudo**: una barra larga arriba en el centro, de una sola pieza con puntas, en relieve (más clara arriba, más oscura abajo) y con brillo. Se vacía de derecha a izquierda, parpadea cuando está casi vacío y se pone dorado con el sobreescudo.
+- **Vida**: debajo, el "+" en su propia figura y al lado una barra verde agua; se pone roja cuando estás bajo de vida.
+- **Líneas de visor**: salen de los lados, bajan en diagonal y pasan por debajo del escudo.
+- **Radar**: en un panel de ocho lados con anillos, cruz, marcas y la flecha del jugador.
+
+La munición y las granadas siguen siendo las del juego. Las partes nuevas también se mueven con el dedo en el editor de botones. En OFF (como viene) queda el HUD original.
+
 ### Radar con barrido
-El radar tiene encima un barrido azul que gira, una cruz y dos anillos. El resto del HUD es el original. Para volver al radar original: **TRUCOS > HUD: RADAR > RADAR CON BARRIDO: OFF**.
+El radar tiene encima un barrido azul que gira (y, con el HUD original, una cruz y dos anillos). Para quitarlo: **TRUCOS > HUD: RADAR > RADAR CON BARRIDO: OFF**.
 
 ### Ajustes
 En **TRUCOS > AJUSTES**:
