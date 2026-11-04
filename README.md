@@ -8,6 +8,8 @@ Este parche de trucos se creó y se aplica sobre el repositorio oficial de OpenC
 
 > Proyecto no oficial de un aficionado. No tiene relación con Microsoft, Xbox Game Studios, Halo Studios, Activision ni Bungie. Halo y Halo: Combat Evolved son marcas de Microsoft Corporation. **No incluye el juego**: necesitas tu propia copia (imagen de disco de Xbox, `.iso` o `.xiso`), como pide OpenCE.
 
+![Jugando en el teléfono: controles táctiles, HUD moderno y flecha guía](capturas/jugando.jpg)
+
 ## Qué incluye
 
 ### Menús en español
@@ -15,6 +17,8 @@ El menú principal (CAMPAÑA, MULTIJUGADOR, PERFILES, AJUSTES, SALIR), los ajust
 
 ### Menú TRUCOS
 Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES > TRUCOS**.
+
+![El menú TRUCOS](capturas/menu_trucos.jpg)
 
 | Opción | Qué hace |
 |---|---|
@@ -35,6 +39,8 @@ Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES >
 Las cuatro últimas funcionan como **botones**: las pones en ON, vuelves al juego, se ejecutan una vez y vuelven solas a OFF. Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados.
 Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro jugador valen sus reglas.
 
+![TRUCOS > ARMAS Y VEHICULOS](capturas/armas_vehiculos.jpg)
+
 ### Flecha guía
 Una **flecha con la distancia en metros** que te indica hacia dónde ir. Se dibuja igual que los marcadores que el propio juego pone en algunas misiones: una flecha sobre el lugar y los metros debajo. Si lo que busca queda detrás de ti o fuera de la pantalla, la flecha se pega al borde de la pantalla del lado por donde tienes que girar.
 
@@ -49,6 +55,10 @@ Una **flecha con la distancia en metros** que te indica hacia dónde ir. Se dibu
 | **ENEMIGO CERCANO** | Al enemigo vivo más cercano |
 
 El cambio se ve al volver al juego, sin reiniciar. La elección se guarda.
+
+![TRUCOS > GUIA](capturas/guia.jpg)
+
+![La flecha guía (flecha doble y metros) en un pasillo](capturas/flecha_y_hud_moderno.jpg)
 
 #### Objetivo de la misión
 - En la campaña, cada misión tiene zonas invisibles que hacen avanzar la historia cuando entras en ellas (abrir una puerta, que llegue un Pelican, la siguiente escena). La flecha **lee en vivo qué zona está esperando la misión** y apunta a ella.
@@ -99,13 +109,25 @@ En **TRUCOS > HUD: ESTILO > HUD MODERNO: ON** el HUD cambia a un estilo como el 
 - **Líneas de visor**: salen de los lados, bajan en diagonal y pasan por debajo del escudo.
 - **Radar**: en un panel de ocho lados con anillos, cruz, marcas y la flecha del jugador.
 
-La munición y las granadas siguen siendo las del juego. Las partes nuevas también se mueven con el dedo en el editor de botones. En OFF (como viene) queda el HUD original.
+La munición y las granadas siguen siendo las del juego. Las partes nuevas también se mueven con el dedo en el editor de botones.
+
+Es una **modificación opcional**: puedes dejar el **HUD original** del juego (OFF, como viene) o usar el **moderno** (ON), y cambiar entre los dos cuando quieras.
+
+![TRUCOS > HUD: ESTILO](capturas/hud_moderno_opcion.jpg)
+
+![El HUD moderno en el juego: escudo, vida y radar](capturas/flecha_y_hud_moderno.jpg)
+
+El estilo se basó en esta **imagen de referencia**. Es una ilustración, no una captura del juego: el paisaje y la munición/granadas de la imagen no son parte de esta versión, solo la idea del escudo, la vida y el radar.
+
+![Imagen de referencia del HUD moderno (ilustración)](capturas/hud_referencia.jpg)
 
 ### Radar con barrido
 El radar tiene encima un barrido azul que gira (y, con el HUD original, una cruz y dos anillos). Para quitarlo: **TRUCOS > HUD: RADAR > RADAR CON BARRIDO: OFF**.
 
 ### Ajustes
 En **TRUCOS > AJUSTES**:
+
+![TRUCOS > AJUSTES](capturas/ajustes.jpg)
 
 - **Idioma del juego**: con una copia europea del juego (que trae español), los textos que vienen del disco salen en español. Cambia al reiniciar.
 - **HDR, exposición y curva de tonos**: activar HDR y subir la exposición ayuda cuando el juego se ve oscuro; puede bajar la fluidez.
@@ -148,6 +170,7 @@ Este repositorio **no es un fork** del código de OpenCE: solo guarda los cambio
 | `trucos/textos_es.py` | Los textos en español de los menús |
 | `trucos/menu_es.py` | Dibuja en español las palabras del menú principal y los títulos |
 | `trucos/header_*.png` | Los títulos TRUCOS, HUD, AJUSTES y GUIA |
+| `capturas/` | Las capturas de este README |
 | `LICENSE` | La licencia GNU AGPL v3, la misma de OpenCE |
 
 Si OpenCE cambia las partes que toca el parche, la compilación puede fallar en el paso "Aplicar los trucos" y habrá que ajustar el parche.

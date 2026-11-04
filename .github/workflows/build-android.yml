@@ -8,6 +8,7 @@ on:
   push:
     paths-ignore:
       - "**.md"
+      - "capturas/**"
   workflow_dispatch:
     inputs:
       version:
