@@ -529,7 +529,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -502,6 +502,168 @@
+@@ -502,6 +502,169 @@
      ],
  }
  
@@ -563,12 +563,13 @@
 +
 +SCREENS["network_setup/cheats"] = {
 +    "screen": "cheats_settings_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"),
-+    "spacing": 30, "rows": [],
++    # (ten rows: a 27px step, as Graphics', keeps the last one clear of the help)
++    "spacing": 27, "rows": [],
 +    "categories": [
 +        ("TRUCOS:", "network_setup/cheats_toggles",
 +         "Municion infinita, modo dios, super salto y mas.\\nSolo en partidas que no son en red."),
-+        ("ARMAS Y VEHICULOS:", "network_setup/cheats_items",
-+         "Hace caer armas, vehiculos y powerups cerca de ti.\\nFuncionan como botones."),
++        ("ARMAS, CAMUFLAJE Y LINTERNA:", "network_setup/cheats_items",
++         "Armas, vehiculos y powerups cerca de ti,\\ncamuflaje activo y la linterna."),
 +        ("HUD: ESTILO:", "network_setup/cheats_hud_estilo",
 +         "El HUD original o el moderno: escudo y vida en\\nbarras largas arriba y radar en un panel."),
 +        ("HUD: RADAR:", "network_setup/cheats_hud_radar",
@@ -608,12 +609,6 @@
 +         "Al chocar con un enemigo o un vehiculo\\nlo controlas.", None),
 +        ("SENTIR EL DANO DE OTROS:", "cheats.reflexive_damage_effects", ON_OFF,
 +         "Cuando otros reciben dano, tu pantalla reacciona\\n(sacudida, destellos) como si te golpearan a ti.", None),
-+        ("CAMUFLAJE ACTIVO:", "cheats.active_camouflage", ON_OFF,
-+         "ON: eres invisible (al disparar se nota un poco).\\nOFF: vuelves a ser visible.", None),
-+        ("LUZ INFINITA:", "cheats.infinite_flashlight", ON_OFF,
-+         "La linterna nunca se apaga: su bateria\\nsiempre esta llena.", None),
-+        ("LINTERNA AMPLIA:", "cheats.wide_flashlight", ON_OFF,
-+         "La linterna alumbra mas lejos y con un\\ncono mas ancho.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_items"] = {
@@ -625,6 +620,12 @@
 +         "Ponlo en ON y vuelve al juego: caen todos los\\nvehiculos sobre ti y esto vuelve solo a OFF.", None),
 +        ("TODOS LOS POWERUPS:", "cheats.all_powerups", ON_OFF,
 +         "Ponlo en ON y vuelve al juego: caen todos los\\npowerups cerca de ti y esto vuelve solo a OFF.", None),
++        ("CAMUFLAJE ACTIVO:", "cheats.active_camouflage", ON_OFF,
++         "ON: eres invisible (al disparar se nota un poco).\\nOFF: vuelves a ser visible.", None),
++        ("LUZ INFINITA:", "cheats.infinite_flashlight", ON_OFF,
++         "La linterna nunca se apaga: su bateria\\nsiempre esta llena.", None),
++        ("LINTERNA AMPLIA:", "cheats.wide_flashlight", ON_OFF,
++         "La linterna alumbra mas lejos y con un\\ncono mas ancho.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_hud_estilo"] = {

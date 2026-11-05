@@ -31,17 +31,22 @@ Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES >
 | Jetpack | Puedes volar |
 | Poseer al chocar | Al chocar con un enemigo o vehículo lo controlas |
 | Sentir el daño de otros | Cuando otros reciben daño, tu pantalla reacciona como si te golpearan |
-| Camuflaje activo | ON: eres invisible (vuelve aunque mueras). OFF: vuelves a ser visible |
-| Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
-| Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
+
+En **TRUCOS > ARMAS, CAMUFLAJE Y LINTERNA**:
+
+| Opción | Qué hace |
+|---|---|
 | Todas las armas | Caen todas las armas cerca de ti |
 | Todos los vehículos | Caen en círculo alrededor de ti, separados |
 | Todos los powerups | Caen todos los powerups cerca de ti |
+| Camuflaje activo | ON: eres invisible (vuelve aunque mueras). OFF: vuelves a ser visible |
+| Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
+| Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
 
-Las tres últimas funcionan como **botones**: las pones en ON, vuelves al juego, se ejecutan una vez y vuelven solas a OFF. Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados.
+Armas, vehículos y powerups funcionan como **botones**: las pones en ON, vuelves al juego, se ejecutan una vez y vuelven solas a OFF. Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados.
 Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro jugador valen sus reglas.
 
-![TRUCOS > ARMAS Y VEHICULOS](capturas/armas_vehiculos.jpg)
+![TRUCOS > ARMAS Y VEHICULOS (antes de sumar camuflaje y linterna)](capturas/armas_vehiculos.jpg)
 
 ### Flecha guía
 Una **flecha con la distancia en metros** que te indica hacia dónde ir. Se dibuja igual que los marcadores que el propio juego pone en algunas misiones: una flecha sobre el lugar y los metros debajo. Si lo que busca queda detrás de ti o fuera de la pantalla, la flecha se pega al borde de la pantalla del lado por donde tienes que girar.
