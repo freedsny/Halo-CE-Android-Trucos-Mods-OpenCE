@@ -31,12 +31,14 @@ Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES >
 | Jetpack | Puedes volar |
 | Poseer al chocar | Al chocar con un enemigo o vehículo lo controlas |
 | Sentir el daño de otros | Cuando otros reciben daño, tu pantalla reacciona como si te golpearan |
+| Camuflaje activo | ON: eres invisible (vuelve aunque mueras). OFF: vuelves a ser visible |
+| Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
+| Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
 | Todas las armas | Caen todas las armas cerca de ti |
 | Todos los vehículos | Caen en círculo alrededor de ti, separados |
 | Todos los powerups | Caen todos los powerups cerca de ti |
-| Camuflaje activo | Te vuelves invisible |
 
-Las cuatro últimas funcionan como **botones**: las pones en ON, vuelves al juego, se ejecutan una vez y vuelven solas a OFF. Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados.
+Las tres últimas funcionan como **botones**: las pones en ON, vuelves al juego, se ejecutan una vez y vuelven solas a OFF. Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados.
 Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro jugador valen sus reglas.
 
 ![TRUCOS > ARMAS Y VEHICULOS](capturas/armas_vehiculos.jpg)

@@ -22,7 +22,7 @@
  
  /* ---------- constants */
  
-@@ -195,10 +198,277 @@
+@@ -195,10 +198,321 @@
  	return;
  }
  
@@ -222,8 +222,45 @@
 +	{ "cheats.all_weapons", cheat_all_weapons, FALSE },
 +	{ "cheats.all_vehicles", cheat_port_all_vehicles, FALSE },
 +	{ "cheats.all_powerups", cheat_port_all_powerups, FALSE },
-+	{ "cheats.active_camouflage", cheat_active_camouflage, FALSE },
 +};
++
++/* port: the cheats on the player's own unit while their setting is on
++(TRUCOS): the flashlight's battery kept full, the active camouflage kept on
++(turned off, the player shows again), and the wide flashlight
++(object_lights.c) */
++void light_port_flashlight_set(boolean wide);
++void light_port_flashlight_forget(void);
++static boolean cheat_port_infinite_flashlight = FALSE;
++static boolean cheat_port_camouflage = FALSE;
++static boolean cheat_port_camouflage_on = FALSE;
++static boolean cheat_port_wide_flashlight = FALSE;
++
++static void cheat_port_unit_settings(
++	boolean own_game)
++{
++	long player_index = cheat_player_index();
++	struct unit_datum *unit = NULL;
++
++	if (player_index!=NONE && player_get(player_index)->unit_index!=NONE)
++		unit = unit_get(player_get(player_index)->unit_index);
++	if (unit && own_game && cheat_port_infinite_flashlight)
++		unit->unit.integrated_light_battery = 1.0f;
++	if (unit && own_game && cheat_port_camouflage)
++	{
++		/* (on again after a death, which ends it) */
++		if (!TEST_FLAG(unit->unit.flags, _unit_active_camouflaged_bit))
++			cheat_active_camouflage();
++		cheat_port_camouflage_on = TRUE;
++	}
++	else if (cheat_port_camouflage_on)
++	{
++		/* (it fades out as a camouflage running out does) */
++		if (unit)
++			unit->unit.flags &= ~(FLAG(_unit_active_camouflaged_bit) | FLAG(_unit_super_camouflaged_bit));
++		cheat_port_camouflage_on = FALSE;
++	}
++	light_port_flashlight_set(cheat_port_wide_flashlight);
++}
 +
 +#define NUMBER_OF_CHEAT_ACTION_SETTINGS (sizeof(cheat_action_settings)/sizeof(cheat_action_settings[0]))
 +
@@ -241,10 +278,16 @@
 +	boolean own_game = game_connection()==_game_connection_local && !network_game_distributed_client();
 +	short index;
 +
++	/* (a new map's tags are as the tools made them) */
++	if (force)
++		light_port_flashlight_forget();
 +	if (force || !cheat_settings_read || changes!=cheat_settings_changes)
 +	{
 +		cheat_settings_read = TRUE;
 +		cheat_settings_changes = changes;
++		cheat_port_infinite_flashlight = config_boolean("cheats.infinite_flashlight")!=0;
++		cheat_port_camouflage = config_boolean("cheats.active_camouflage")!=0;
++		cheat_port_wide_flashlight = config_boolean("cheats.wide_flashlight")!=0;
 +		for (index = 0; index<(short)NUMBER_OF_CHEAT_SETTINGS; index++)
 +		{
 +			struct cheat_setting *setting = cheat_settings + index;
@@ -288,6 +331,7 @@
 +			action->done = FALSE;
 +		}
 +	}
++	cheat_port_unit_settings(own_game);
 +
 +	return;
 +}
@@ -300,7 +344,7 @@
  	if (cheat.controller_enabled)
  	{
  		short local_player_index;
-@@ -310,6 +580,7 @@
+@@ -310,6 +624,7 @@
  	void)
  {
  	cheats_load();
@@ -310,7 +354,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -553,6 +553,144 @@
+@@ -553,6 +553,151 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -376,10 +420,17 @@
 +		"menu, SETTINGS, TRUCOS), then put back to false: it works as a button.\n"
 +		"Not in another host's game: its rules." },
 +	{ "cheats.active_camouflage", _config_boolean, "false", "HALO_CHEATS_ACTIVE_CAMOUFLAGE", _environment_value, _platform_all,
-+		"Active camouflage: makes the player invisible.\n"
-+		"true: done once at the next tick of a game that is not on a network (pause\n"
-+		"menu, SETTINGS, TRUCOS), then put back to false: it works as a button.\n"
++		"Active camouflage: the player is invisible while it is true (again after a\n"
++		"death); false: the player shows again. In a game that is not on a network\n"
++		"(pause menu, SETTINGS, TRUCOS). Not in another host's game: its rules." },
++	{ "cheats.infinite_flashlight", _config_boolean, "false", "HALO_CHEATS_INFINITE_FLASHLIGHT", _environment_value, _platform_all,
++		"Infinite flashlight: its battery stays full, so it never goes out.\n"
++		"In a game that is not on a network (pause menu, SETTINGS, TRUCOS).\n"
 +		"Not in another host's game: its rules." },
++	{ "cheats.wide_flashlight", _config_boolean, "false", "HALO_CHEATS_WIDE_FLASHLIGHT", _environment_value, _platform_all,
++		"Wide flashlight: the first-person flashlight reaches 1.7 times as far and its\n"
++		"cone is half as wide again (pause menu, SETTINGS, TRUCOS). Only how this\n"
++		"machine draws it." },
 +	{ "guide.mode", _config_string, "\"off\"", "HALO_GUIDE_MODE", _environment_value, _platform_all,
 +		"The guide arrow (pause menu, SETTINGS, TRUCOS, GUIA), drawn like the scripts'\n"
 +		"markers, with the distance in meters: \"off\", \"ally\" (the nearest ally),\n"
@@ -478,7 +529,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -502,6 +502,164 @@
+@@ -502,6 +502,168 @@
      ],
  }
  
@@ -517,7 +568,7 @@
 +        ("TRUCOS:", "network_setup/cheats_toggles",
 +         "Municion infinita, modo dios, super salto y mas.\\nSolo en partidas que no son en red."),
 +        ("ARMAS Y VEHICULOS:", "network_setup/cheats_items",
-+         "Hace caer armas, vehiculos y powerups cerca de ti,\\no te vuelve invisible. Funcionan como botones."),
++         "Hace caer armas, vehiculos y powerups cerca de ti.\\nFuncionan como botones."),
 +        ("HUD: ESTILO:", "network_setup/cheats_hud_estilo",
 +         "El HUD original o el moderno: escudo y vida en\\nbarras largas arriba y radar en un panel."),
 +        ("HUD: RADAR:", "network_setup/cheats_hud_radar",
@@ -557,6 +608,12 @@
 +         "Al chocar con un enemigo o un vehiculo\\nlo controlas.", None),
 +        ("SENTIR EL DANO DE OTROS:", "cheats.reflexive_damage_effects", ON_OFF,
 +         "Cuando otros reciben dano, tu pantalla reacciona\\n(sacudida, destellos) como si te golpearan a ti.", None),
++        ("CAMUFLAJE ACTIVO:", "cheats.active_camouflage", ON_OFF,
++         "ON: eres invisible (al disparar se nota un poco).\\nOFF: vuelves a ser visible.", None),
++        ("LUZ INFINITA:", "cheats.infinite_flashlight", ON_OFF,
++         "La linterna nunca se apaga: su bateria\\nsiempre esta llena.", None),
++        ("LINTERNA AMPLIA:", "cheats.wide_flashlight", ON_OFF,
++         "La linterna alumbra mas lejos y con un\\ncono mas ancho.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_items"] = {
@@ -568,8 +625,6 @@
 +         "Ponlo en ON y vuelve al juego: caen todos los\\nvehiculos sobre ti y esto vuelve solo a OFF.", None),
 +        ("TODOS LOS POWERUPS:", "cheats.all_powerups", ON_OFF,
 +         "Ponlo en ON y vuelve al juego: caen todos los\\npowerups cerca de ti y esto vuelve solo a OFF.", None),
-+        ("CAMUFLAJE ACTIVO:", "cheats.active_camouflage", ON_OFF,
-+         "Ponlo en ON y vuelve al juego: te vuelves invisible\\ny esto vuelve solo a OFF.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_hud_estilo"] = {
@@ -4416,3 +4471,127 @@
          if (!hidden || editing) {
              if (layout.shown(TouchLayout.LEFT))
                  drawStick(canvas);
+--- a/source/objects/object_lights.c
++++ b/source/objects/object_lights.c
+@@ -2729,3 +2729,121 @@
+ 
+ 	return;
+ }
++
++/* ---------- port: the wide flashlight (TRUCOS, LINTERNA AMPLIA,
++cheats.wide_flashlight)
++
++The first-person flashlight's lights (_light_definition_is_first_person_
++flashlight_bit) made to reach farther and their cone wider, in the map's
++tags while it is loaded, and put back as they were when it is turned off.
++Their runtime cosines and sine, which the tools wrote, are worked out again
++the way the map has them (of the angle, or of half of it) */
++#define LIGHT_PORT_MAXIMUM_FLASHLIGHTS 16
++#define LIGHT_PORT_FLASHLIGHT_RADIUS 1.7f
++#define LIGHT_PORT_FLASHLIGHT_ANGLE 1.5f
++
++static struct
++{
++	long tag_index;
++	real radius;
++	real falloff_angle;
++	real cutoff_angle;
++	real runtime_cosine_falloff_angle;
++	real runtime_cosine_cutoff_angle;
++	real runtime_sine_cutoff_angle;
++} light_port_flashlights[LIGHT_PORT_MAXIMUM_FLASHLIGHTS];
++static short light_port_flashlight_count = 0;
++static boolean light_port_flashlight_wide = FALSE;
++
++/* the cosine (or sine) of a new angle, as the map's value is of the old one:
++of the angle, or of half of it */
++static real light_port_like(
++	real old_angle,
++	real old_value,
++	real new_angle,
++	boolean sine)
++{
++	real whole = sine ? (real)sin(old_angle) : (real)cos(old_angle);
++	real half = sine ? (real)sin(old_angle*0.5f) : (real)cos(old_angle*0.5f);
++
++	if ((real)fabs(half-old_value)<(real)fabs(whole-old_value))
++		return sine ? (real)sin(new_angle*0.5f) : (real)cos(new_angle*0.5f);
++	return sine ? (real)sin(new_angle) : (real)cos(new_angle);
++}
++
++/* a new map: its tags are its own, as the tools made them */
++void light_port_flashlight_forget(
++	void)
++{
++	light_port_flashlight_count = 0;
++	light_port_flashlight_wide = FALSE;
++}
++
++void light_port_flashlight_set(
++	boolean wide)
++{
++	short index;
++
++	if (wide==light_port_flashlight_wide)
++		return;
++	light_port_flashlight_wide = wide;
++	if (wide)
++	{
++		struct tag_iterator iterator;
++		long tag_index;
++
++		light_port_flashlight_count = 0;
++		tag_iterator_new(&iterator, LIGHT_DEFINITION_TAG);
++		for (tag_index = tag_iterator_next(&iterator);
++			tag_index!=NONE && light_port_flashlight_count<LIGHT_PORT_MAXIMUM_FLASHLIGHTS;
++			tag_index = tag_iterator_next(&iterator))
++		{
++			struct point_light_definition *definition = light_definition_get(tag_index);
++			real falloff, cutoff;
++
++			if (!definition || !TEST_FLAG(definition->flags, _light_definition_is_first_person_flashlight_bit))
++				continue;
++			index = light_port_flashlight_count++;
++			light_port_flashlights[index].tag_index = tag_index;
++			light_port_flashlights[index].radius = definition->radius;
++			light_port_flashlights[index].falloff_angle = definition->falloff_angle;
++			light_port_flashlights[index].cutoff_angle = definition->cutoff_angle;
++			light_port_flashlights[index].runtime_cosine_falloff_angle = definition->runtime_cosine_falloff_angle;
++			light_port_flashlights[index].runtime_cosine_cutoff_angle = definition->runtime_cosine_cutoff_angle;
++			light_port_flashlights[index].runtime_sine_cutoff_angle = definition->runtime_sine_cutoff_angle;
++
++			definition->radius *= LIGHT_PORT_FLASHLIGHT_RADIUS;
++			/* (a cone only: an omnidirectional light keeps its angles) */
++			if (definition->cutoff_angle>0.0f && definition->cutoff_angle<_pi/2)
++			{
++				cutoff = MIN(definition->cutoff_angle*LIGHT_PORT_FLASHLIGHT_ANGLE, _pi/2-0.1f);
++				falloff = MIN(definition->falloff_angle*LIGHT_PORT_FLASHLIGHT_ANGLE, cutoff);
++				definition->runtime_cosine_falloff_angle = light_port_like(definition->falloff_angle,
++					definition->runtime_cosine_falloff_angle, falloff, FALSE);
++				definition->runtime_cosine_cutoff_angle = light_port_like(definition->cutoff_angle,
++					definition->runtime_cosine_cutoff_angle, cutoff, FALSE);
++				definition->runtime_sine_cutoff_angle = light_port_like(definition->cutoff_angle,
++					definition->runtime_sine_cutoff_angle, cutoff, TRUE);
++				definition->falloff_angle = falloff;
++				definition->cutoff_angle = cutoff;
++			}
++		}
++	}
++	else
++	{
++		for (index = 0; index<light_port_flashlight_count; index++)
++		{
++			struct point_light_definition *definition = light_definition_get(light_port_flashlights[index].tag_index);
++
++			if (!definition)
++				continue;
++			definition->radius = light_port_flashlights[index].radius;
++			definition->falloff_angle = light_port_flashlights[index].falloff_angle;
++			definition->cutoff_angle = light_port_flashlights[index].cutoff_angle;
++			definition->runtime_cosine_falloff_angle = light_port_flashlights[index].runtime_cosine_falloff_angle;
++			definition->runtime_cosine_cutoff_angle = light_port_flashlights[index].runtime_cosine_cutoff_angle;
++			definition->runtime_sine_cutoff_angle = light_port_flashlights[index].runtime_sine_cutoff_angle;
++		}
++		light_port_flashlight_count = 0;
++	}
++}
