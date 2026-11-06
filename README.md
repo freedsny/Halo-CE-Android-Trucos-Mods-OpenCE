@@ -49,7 +49,7 @@ Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro
 ![TRUCOS > ARMAS Y VEHICULOS (antes de sumar camuflaje y linterna)](capturas/armas_vehiculos.jpg)
 
 ### Flecha guía
-Una **flecha con la distancia en metros** que te indica hacia dónde ir. Se dibuja igual que los marcadores que el propio juego pone en algunas misiones: una flecha sobre el lugar y los metros debajo. Si lo que busca queda detrás de ti o fuera de la pantalla, la flecha se pega al borde de la pantalla del lado por donde tienes que girar.
+Una **flecha naranja con la distancia en metros** que te indica hacia dónde ir. Se dibuja igual que los marcadores que el propio juego pone en algunas misiones: una flecha sobre el lugar y los metros debajo. Es naranja para que no se confunda con los niveles que tienen mucho azul. Si lo que busca queda detrás de ti o fuera de la pantalla, la flecha se pega al borde de la pantalla del lado por donde tienes que girar.
 
 #### Cómo activarla
 **Pausa > AJUSTES > TRUCOS > GUIA > FLECHA GUIA** (también desde **AJUSTES > tu perfil > TRUCOS > GUIA**). Tiene cuatro opciones:

@@ -2024,18 +2024,22 @@
  
  /* ---------- constants */
  
-@@ -675,6 +683,10 @@
+@@ -675,6 +683,14 @@
  	return render_type;
  }
  
 +/* port: the guide arrow's distance (hud_port_guide_render): when it is drawn at
 +the next corner of its route, the meters and the size are those of the target */
 +static real hud_port_nav_distance_override = -1.f;
++/* port: and its color: orange, as the game's own markers are at times (the
++blue of the scripts' markers is lost in the many blue levels); 0, the arrow's */
++#define HUD_PORT_GUIDE_COLOR 0x00FF9020
++static pixel32 hud_port_nav_color_override = 0;
 +
  void custom_render_nav_point(
  	short local_player_index,
  	real_point3d const *position_pointer,
-@@ -701,6 +713,10 @@
+@@ -701,6 +717,10 @@
  		unit_get_camera_position(local_player_get_player_index(local_player_index) == NONE ? NONE : player_get(local_player_get_player_index(local_player_index))->unit_index, &cam_pos);
  		distance = distance3d(&cam_pos, position_pointer);
  	}
@@ -2046,7 +2050,16 @@
  
  	if (distance > 15.f)
  	{
-@@ -807,6 +823,1122 @@
+@@ -763,7 +783,7 @@
+ 			corner.x = (short)screen_position.x;
+ 			corner.y = (short)screen_position.y;
+ 			alpha = PIN(255 * fast_ftol_C(arrow->opacity), 0, 255);
+-			pixel32_to_real_rgb_color(arrow->color, &rgb_temp);
++			pixel32_to_real_rgb_color(hud_port_nav_color_override ? hud_port_nav_color_override : arrow->color, &rgb_temp);
+ 			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
+ 			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
+ 			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
+@@ -807,6 +827,1124 @@
  	return;
  }
  
@@ -3152,6 +3165,7 @@
 +		}
 +		/* a corner of the route is drawn as in sight (the bumps of the ground hide
 +		it): the hidden kind is left to the target itself, when there is no way */
++		hud_port_nav_color_override = HUD_PORT_GUIDE_COLOR;
 +		custom_render_nav_point(
 +			local_player_index,
 +			&point,
@@ -3161,6 +3175,7 @@
 +				hud_get_nav_point_render_type(local_player_index, &head_position, &point, point_object_index) :
 +				0);
 +		hud_port_nav_distance_override = -1.f;
++		hud_port_nav_color_override = 0;
 +	}
 +
 +	return;
@@ -3169,7 +3184,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +2034,8 @@
+@@ -902,6 +2040,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
