@@ -3346,7 +3346,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1018,3 +2164,155 @@
+@@ -1018,3 +2164,193 @@
  
  	return;
  }
@@ -3383,12 +3383,50 @@
 +	return location.cluster_index!=NONE;
 +}
 +
-+/* a teleport to a point inside the level (else none) */
++/* a teleport to a point inside the level, else none. The game's teleport
++(player_teleport) kills a player it cannot fit, or who would land on a zone
++that loads another part of the level (a BSP switch): such a spot is tried
++first without moving him (biped_fix_position's dont_teleport), and left */
++/* (players.c's: the scenario's records of the zones that switch the BSP) */
++struct scenario_bsp_switch_trigger_volume
++{
++	short trigger_volume_index;
++	short source_structure_bsp_index;
++	short destination_structure_bsp_index;
++	short cutscene_flag_index;
++};
++
 +static boolean hud_port_guide_teleport_to(
 +	long player_index,
 +	real_point3d const *point)
 +{
-+	return hud_port_guide_inside_level(point) && player_teleport(player_index, NONE, point);
++	long unit_index = player_get(player_index)->unit_index;
++	struct scenario *scenario = global_scenario_get();
++	real_point3d final_point;
++	short index;
++
++	if (unit_index==NONE || !biped_try_and_get(unit_index) || !hud_port_guide_inside_level(point))
++		return FALSE;
++	final_point = *point;
++	if (!biped_fix_position(unit_index, NONE, point, &final_point, 2.f, FALSE, TRUE, TRUE) ||
++		!hud_port_guide_inside_level(&final_point))
++	{
++		return FALSE;
++	}
++	for (index = 0; index<scenario->bsp_switch_trigger_volumes.count; index++)
++	{
++		struct scenario_bsp_switch_trigger_volume *volume = TAG_BLOCK_GET_ELEMENT(
++			&scenario->bsp_switch_trigger_volumes, index, struct scenario_bsp_switch_trigger_volume);
++
++		if (volume->source_structure_bsp_index==global_structure_bsp_index &&
++			(scenario_trigger_volume_test_point(volume->trigger_volume_index, point) ||
++				scenario_trigger_volume_test_point(volume->trigger_volume_index, &final_point)))
++		{
++			return FALSE;
++		}
++	}
++
++	return player_teleport(player_index, NONE, point);
 +}
 +
 +static boolean hud_port_guide_teleport_allowed(
