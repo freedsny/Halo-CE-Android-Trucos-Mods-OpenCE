@@ -32,7 +32,7 @@ Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES >
 | Poseer al chocar | Al chocar con un enemigo o vehículo lo controlas |
 | Sentir el daño de otros | Cuando otros reciben daño, tu pantalla reacciona como si te golpearan |
 
-En **TRUCOS > ARMAS, CAMUFLAJE Y LINTERNA**:
+En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 
 | Opción | Qué hace |
 |---|---|
@@ -42,6 +42,7 @@ En **TRUCOS > ARMAS, CAMUFLAJE Y LINTERNA**:
 | Camuflaje activo | ON: eres invisible (vuelve aunque mueras). OFF: vuelves a ser visible |
 | Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
 | Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
+| Teletransporte | Aparece un botón **Ir** debajo de Options: al tocarlo te lleva a donde apunta la flecha guía (necesita la flecha guía encendida) |
 
 Armas, vehículos y powerups funcionan como **botones**: las pones en ON, vuelves al juego, se ejecutan una vez y vuelven solas a OFF. Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados.
 Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro jugador valen sus reglas.

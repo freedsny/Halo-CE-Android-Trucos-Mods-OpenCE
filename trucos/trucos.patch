@@ -22,7 +22,7 @@
  
  /* ---------- constants */
  
-@@ -195,10 +198,321 @@
+@@ -195,10 +198,323 @@
  	return;
  }
  
@@ -230,6 +230,7 @@
 +(object_lights.c) */
 +void light_port_flashlight_set(boolean wide);
 +void light_port_flashlight_forget(void);
++void hud_port_guide_teleport_update(void); /* (hud_nav_points.c: TELETRANSPORTE) */
 +static boolean cheat_port_infinite_flashlight = FALSE;
 +static boolean cheat_port_camouflage = FALSE;
 +static boolean cheat_port_camouflage_on = FALSE;
@@ -260,6 +261,7 @@
 +		cheat_port_camouflage_on = FALSE;
 +	}
 +	light_port_flashlight_set(cheat_port_wide_flashlight);
++	hud_port_guide_teleport_update();
 +}
 +
 +#define NUMBER_OF_CHEAT_ACTION_SETTINGS (sizeof(cheat_action_settings)/sizeof(cheat_action_settings[0]))
@@ -344,7 +346,7 @@
  	if (cheat.controller_enabled)
  	{
  		short local_player_index;
-@@ -310,6 +624,7 @@
+@@ -310,6 +626,7 @@
  	void)
  {
  	cheats_load();
@@ -354,7 +356,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -553,6 +553,151 @@
+@@ -553,6 +553,155 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -427,6 +429,10 @@
 +		"Infinite flashlight: its battery stays full, so it never goes out.\n"
 +		"In a game that is not on a network (pause menu, SETTINGS, TRUCOS).\n"
 +		"Not in another host's game: its rules." },
++	{ "cheats.teleport", _config_boolean, "false", "HALO_CHEATS_TELEPORT", _environment_value, _platform_all,
++		"Teleport: while true, the touch controls show an \"Ir\" button when the\n"
++		"guide arrow (guide.mode) has somewhere to go; it takes the player there.\n"
++		"In a game that is not on a network (pause menu, SETTINGS, TRUCOS)." },
 +	{ "cheats.wide_flashlight", _config_boolean, "false", "HALO_CHEATS_WIDE_FLASHLIGHT", _environment_value, _platform_all,
 +		"Wide flashlight: the first-person flashlight reaches 1.7 times as far and its\n"
 +		"cone is half as wide again (pause menu, SETTINGS, TRUCOS). Only how this\n"
@@ -529,7 +535,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -502,6 +502,169 @@
+@@ -502,6 +502,171 @@
      ],
  }
  
@@ -568,8 +574,8 @@
 +    "categories": [
 +        ("TRUCOS:", "network_setup/cheats_toggles",
 +         "Municion infinita, modo dios, super salto y mas.\\nSolo en partidas que no son en red."),
-+        ("ARMAS, CAMUFLAJE Y LINTERNA:", "network_setup/cheats_items",
-+         "Armas, vehiculos y powerups cerca de ti,\\ncamuflaje activo y la linterna."),
++        ("ARMAS, LINTERNA Y MAS:", "network_setup/cheats_items",
++         "Armas, vehiculos y powerups cerca de ti, camuflaje,\\nla linterna y el teletransporte."),
 +        ("HUD: ESTILO:", "network_setup/cheats_hud_estilo",
 +         "El HUD original o el moderno: escudo y vida en\\nbarras largas arriba y radar en un panel."),
 +        ("HUD: RADAR:", "network_setup/cheats_hud_radar",
@@ -626,6 +632,8 @@
 +         "La linterna nunca se apaga: su bateria\\nsiempre esta llena.", None),
 +        ("LINTERNA AMPLIA:", "cheats.wide_flashlight", ON_OFF,
 +         "La linterna alumbra mas lejos y con un\\ncono mas ancho.", None),
++        ("TELETRANSPORTE:", "cheats.teleport", ON_OFF,
++         "Sale el boton IR en pantalla: te lleva a donde apunta\\nla FLECHA GUIA (encendida en TRUCOS > GUIA).", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_hud_estilo"] = {
@@ -2059,7 +2067,7 @@
  			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
-@@ -807,6 +827,1124 @@
+@@ -807,6 +827,1129 @@
  	return;
  }
  
@@ -3132,6 +3140,10 @@
 +	return;
 +}
 +
++/* port: when the arrow was last drawn somewhere to go (the teleport button,
++below) */
++static unsigned long hud_port_guide_drawn_at = 0;
++
 +static void hud_port_guide_render(
 +	short local_player_index)
 +{
@@ -3176,6 +3188,7 @@
 +				0);
 +		hud_port_nav_distance_override = -1.f;
 +		hud_port_nav_color_override = 0;
++		hud_port_guide_drawn_at = system_milliseconds();
 +	}
 +
 +	return;
@@ -3184,7 +3197,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +2040,8 @@
+@@ -902,6 +2045,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -3193,6 +3206,119 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
+@@ -1018,3 +2163,112 @@
+ 
+ 	return;
+ }
++
++
++/* ---------- port: the teleport (TRUCOS, TELETRANSPORTE, cheats.teleport)
++
++The touch controls' "Ir" button (TouchControls.java), shown while the cheat is
++on and the guide arrow has somewhere to go, takes the player there: onto the
++floor a little inside the mission's objective (its nearest point is often at a
++wall), or beside the ally or enemy it points to. The game's own teleport
++(player_teleport: out of a vehicle, fitted where there is room). Only in a
++game that is not on a network. The push comes from the input (touch_input.c)
++and is done at the next tick (cheats.c) */
++#define GUIDE_TELEPORT_SHOWN_MILLISECONDS 600
++#define GUIDE_TELEPORT_INSIDE 0.3f
++#define GUIDE_TELEPORT_BESIDE 1.5f
++
++static boolean hud_port_guide_teleport_wanted = FALSE;
++
++static boolean hud_port_guide_teleport_allowed(
++	void)
++{
++	return game_connection()==_game_connection_local && !network_game_distributed_client() &&
++		config_boolean("cheats.teleport");
++}
++
++boolean hud_port_guide_teleport_ready(
++	void)
++{
++	return hud_port_guide_teleport_allowed() &&
++		system_milliseconds()-hud_port_guide_drawn_at<GUIDE_TELEPORT_SHOWN_MILLISECONDS;
++}
++
++void hud_port_guide_teleport_push(
++	void)
++{
++	hud_port_guide_teleport_wanted = TRUE;
++}
++
++void hud_port_guide_teleport_update(
++	void)
++{
++	short local_player_index = local_player_get_next(NONE);
++	long player_index = local_player_index==NONE ? NONE : local_player_get_player_index(local_player_index);
++	long unit_index = player_index==NONE ? NONE : player_get(player_index)->unit_index;
++	real_point3d target;
++	long target_object_index;
++
++	if (!hud_port_guide_teleport_wanted)
++		return;
++	hud_port_guide_teleport_wanted = FALSE;
++	if (unit_index==NONE || !hud_port_guide_teleport_allowed() ||
++		!hud_port_guide_target(unit_index, &target, &target_object_index))
++	{
++		return;
++	}
++	{
++		real_point3d start = target;
++		real_point3d floor_point;
++		long surface_index;
++		boolean done = FALSE;
++		short candidate_index;
++
++		if (hud_port_guide_target_is_volume)
++		{
++			start.x += (hud_port_guide_target_center.x-target.x)*GUIDE_TELEPORT_INSIDE;
++			start.y += (hud_port_guide_target_center.y-target.y)*GUIDE_TELEPORT_INSIDE;
++			start.z += (hud_port_guide_target_center.z-target.z)*GUIDE_TELEPORT_INSIDE;
++		}
++		else
++		{
++			real_point3d origin;
++			real_vector3d away;
++			real length;
++
++			/* (beside it, on the player's side) */
++			object_get_origin(unit_index, &origin);
++			away.i = origin.x-target.x;
++			away.j = origin.y-target.y;
++			away.k = 0.f;
++			length = square_root(away.i*away.i+away.j*away.j);
++			if (length>0.01f)
++			{
++				start.x += away.i/length*GUIDE_TELEPORT_BESIDE;
++				start.y += away.j/length*GUIDE_TELEPORT_BESIDE;
++			}
++		}
++		start.z += 1.f;
++		if (hud_port_guide_floor(&start, 8.f, &floor_point, &surface_index))
++		{
++			floor_point.z += 0.3f;
++			done = player_teleport(player_index, NONE, &floor_point);
++		}
++		/* (else the floors the arrow's route knows for it) */
++		for (candidate_index = 0; !done && candidate_index<3; candidate_index++)
++		{
++			if (hud_port_guide_goal_floor(&target, candidate_index, &floor_point, &surface_index))
++			{
++				floor_point.z += 0.3f;
++				done = player_teleport(player_index, NONE, &floor_point);
++			}
++		}
++		if (!done)
++			done = player_teleport(player_index, NONE, &target);
++		error(_error_log, "port: teleport to the guide arrow's target (%.1f %.1f %.1f): %s",
++			target.x, target.y, target.z, done ? "done" : "no room");
++	}
++
++	return;
++}
++
 --- a/source/hs/hs_runtime.c
 +++ b/source/hs/hs_runtime.c
 @@ -3416,3 +3416,567 @@
@@ -3897,7 +4023,7 @@
  	{
 --- a/port/linux/src/touch_input.c
 +++ b/port/linux/src/touch_input.c
-@@ -29,6 +29,14 @@
+@@ -29,6 +29,18 @@
  #endif
  #ifdef HALO_ANDROID
  int host_touch_devices(void);
@@ -3909,20 +4035,49 @@
 +void hud_port_touch_shift(short part, float x, float y);
 +void hud_port_touch_preview(short part, float x, float y);
 +static void touch_hud_editor(void);
++/* port: the teleport button (TRUCOS, TELETRANSPORTE: hud_nav_points.c) */
++int host_touch_teleport(void);
++unsigned char hud_port_guide_teleport_ready(void);
++void hud_port_guide_teleport_push(void);
  #endif
  
  /* the game's (port/linux/game/touch_game.c) */
-@@ -321,6 +329,9 @@
+@@ -242,6 +254,9 @@
+ 	device has a touchscreen and no controller) */
+ 	_touch_scene_on = 1 << 2,
+ 	_touch_scene_off = 1 << 3,
++	/* port: the teleport button shows (TRUCOS, TELETRANSPORTE: on, and the
++	guide arrow has somewhere to go) */
++	_touch_scene_teleport = 1 << 4,
+ };
+ 
+ /* the touch controls' stick at port 0's last read, -1..1, y down */
+@@ -311,7 +326,11 @@
+ 	on-screen keyboard is up, whose keys the fingers then tap) */
+ 	host_touch_scene(_touch_scene_known | touch_controls_setting() |
+ 		(menus || !touch_game_playing() || touch_game_cinematic_playing() || (network_chat_controller() == 0) ?
+-			_touch_scene_menus : 0));
++			_touch_scene_menus : 0)
++#ifdef HALO_ANDROID
++		| (hud_port_guide_teleport_ready() ? _touch_scene_teleport : 0)
++#endif
++		);
+ 	/* (the profile's mapping, for the buttons' names; only when it changes) */
+ 	touch_game_button_controls(bindings);
+ 	if (!bindings_known || memcmp(bindings, bindings_sent, sizeof(bindings)))
+@@ -321,6 +340,11 @@
  		host_touch_bindings(bindings);
  	}
  	host_touch_read(state);
 +#ifdef HALO_ANDROID
 +	touch_hud_editor();
++	if (host_touch_teleport())
++		hud_port_guide_teleport_push();
 +#endif
  	/* the stick moves the player through the game's input state, whatever
  	the profile's sticks do (touch_input_move), not as the left stick */
  	move_x = state[0] / 32767.0f;
-@@ -403,3 +414,103 @@
+@@ -403,3 +427,103 @@
  	host_touch_rumble(left, right);
  }
  #endif
@@ -4057,7 +4212,7 @@
  
  static int64_t now_ns(void)
  {
-@@ -252,3 +265,97 @@
+@@ -252,3 +265,117 @@
  	(void)cls;
  	return touch_scene;
  }
@@ -4074,6 +4229,26 @@
 +	memcpy(touch_hud_rects, rects, (size_t)count * 4 * sizeof(float));
 +	touch_hud_serial++;
 +	pthread_mutex_unlock(&touch_lock);
++}
++
++/* port: the teleport button (TRUCOS, TELETRANSPORTE): a push waiting for the
++guest */
++static volatile int touch_teleport_pushed;
++
++JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeTeleport(JNIEnv *env, jclass cls)
++{
++	(void)env;
++	(void)cls;
++	touch_teleport_pushed = 1;
++}
++
++/* the guest's: 1 once for each push of the teleport button */
++int host_touch_teleport(void)
++{
++	int pushed = touch_teleport_pushed;
++
++	touch_teleport_pushed = 0;
++	return pushed;
 +}
 +
 +/* the guest's: the editor's moves into deltas[10] (each part's x and y, as
@@ -4157,19 +4332,20 @@
 +}
 --- a/port/android/host_imports.list
 +++ b/port/android/host_imports.list
-@@ -66,6 +66,9 @@
+@@ -66,6 +66,10 @@
  host_touch_scene
  host_touch_bindings
  host_touch_devices
 +host_touch_hud
 +host_touch_hud_moves
 +host_touch_hud_preview
++host_touch_teleport
  host_https_get
  
  host_errno
 --- a/port/android/guest/runtime/guest_host.h
 +++ b/port/android/guest/runtime/guest_host.h
-@@ -148,6 +148,13 @@
+@@ -148,6 +148,15 @@
  /* the overlay's devices: 1, a touchscreen; 2, a game controller; 0 until it
  has looked */
  int host_touch_devices(void);
@@ -4180,15 +4356,19 @@
 +int host_touch_hud_moves(float *deltas);
 +/* where the layout editor's finger has the HUD's parts, into deltas[10] */
 +void host_touch_hud_preview(float *deltas);
++/* port: 1 once for each push of the teleport button (TRUCOS, TELETRANSPORTE) */
++int host_touch_teleport(void);
  
  /* ---------- the server browser's master servers (host_https.c) */
  
 --- a/port/android/app/src/main/java/com/halo/decomp/TouchControls.java
 +++ b/port/android/app/src/main/java/com/halo/decomp/TouchControls.java
-@@ -61,6 +61,17 @@
+@@ -61,6 +61,19 @@
      private static final int TOOLBAR_EXPORT = -6;
      private static final int TOOLBAR_IMPORT = -7;
      private static final int TOOLBAR_SAVE = -8;
++    /** port: Ir, under Options, while the teleport cheat is on and the guide arrow points somewhere */
++    private static final int TOOLBAR_TELEPORT = -9;
 +    /** the HUD's movable parts in the editor: HUD_PART - part (shield, health, radar, ammo, grenades) */
 +    private static final int HUD_PART = -100;
 +    private static final int HUD_PARTS = 5;
@@ -4203,17 +4383,27 @@
      private static final float TOOLBAR_RADIUS = 28;
      private static final float OPTIONS_RADIUS = TouchLayout.OPTIONS_RADIUS;
      /** the editor's items, this far apart */
-@@ -161,6 +172,9 @@
+@@ -95,6 +108,8 @@
+     private static final int SCENE_MENUS = 2;
+     private static final int SCENE_ON = 4;
+     private static final int SCENE_OFF = 8;
++    /** port: the teleport button shows (TRUCOS, TELETRANSPORTE) */
++    private static final int SCENE_TELEPORT = 16;
+ 
+     private static final String PREFERENCES = "touch-layout-v1";
+     private static final String KEY_CONFIGURATION = "configuration";
+@@ -161,6 +176,10 @@
      private static native int nativeScene();
      private static native int nativeBindings(int[] controls);
      private static native void nativeDevices(boolean touchscreen, boolean controller);
 +    private static native int nativeHudRects(float[] rects);
 +    private static native void nativeHudMove(float[] deltas);
 +    private static native void nativeHudPreview(float[] deltas);
++    private static native void nativeTeleport();
  
      private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
      private final SharedPreferences preferences;
-@@ -223,6 +237,14 @@
+@@ -223,6 +242,14 @@
      private final int[] bindings = DEFAULT_BINDINGS.clone();
      private final int[] bindingsRead = new int[bindings.length];
      private int bindingsSerial;
@@ -4228,15 +4418,55 @@
  
      /** reads what the game says every frame: when to show, the buttons' names, and the rumble */
      private final Runnable poll = new Runnable() {
-@@ -233,6 +255,7 @@
+@@ -230,9 +257,14 @@
+         public void run() {
+             if (!deviceInputActive)
+                 return;
++            int previousScene = scene;
              scene = nativeScene();
++            // (port: Ir comes and goes with the guide arrow)
++            if (((previousScene ^ scene) & SCENE_TELEPORT) != 0)
++                invalidate();
              updateShowing();
              readBindings();
 +            readHud();
              updateRumble();
              postDelayed(this, POLL_MS);
          }
-@@ -552,7 +575,7 @@
+@@ -358,6 +390,23 @@
+         return layout.optionsMoved() ? layout.optionsY() : toolbarY();
+     }
+ 
++    /** port: Ir, under Options (wherever Options was dragged) */
++    private boolean teleportShown() {
++        return (scene & SCENE_TELEPORT) != 0 && !editing && !hidden;
++    }
++
++    private float teleportX() {
++        return optionsX();
++    }
++
++    private float teleportY() {
++        float y = optionsY() + toolbarRadius(OPTIONS_RADIUS) + toolbarRadius(TOOLBAR_RADIUS) + 14;
++        // (Options dragged low: Ir goes above it)
++        if (y + toolbarRadius(TOOLBAR_RADIUS) > logicalHeight)
++            y = optionsY() - toolbarRadius(OPTIONS_RADIUS) - toolbarRadius(TOOLBAR_RADIUS) - 14;
++        return y;
++    }
++
+     private float editorY() {
+         return logicalHeight / 2;
+     }
+@@ -539,6 +588,8 @@
+         if (!editing) {
+             if (inside(x, y, logicalWidth / 2, toolbarY(), toolbarRadius(TOOLBAR_RADIUS)))
+                 return TOOLBAR_TOGGLE;
++            if (teleportShown() && inside(x, y, teleportX(), teleportY(), toolbarRadius(TOOLBAR_RADIUS)))
++                return TOOLBAR_TELEPORT;
+             return hidden ? NOTHING : hitControl(x, y);
+         }
+         // (the controls first: one dropped over Export, Import or Save can still be dragged away)
+@@ -552,7 +603,7 @@
              return TOOLBAR_IMPORT;
          if (inside(x, y, middle + EDITOR_SPACING, editorY(), toolbarRadius(OPTIONS_RADIUS)))
              return TOOLBAR_SAVE;
@@ -4245,7 +4475,25 @@
      }
  
      /** the control under a point (logical units), or NOTHING */
-@@ -742,6 +765,7 @@
+@@ -645,7 +696,7 @@
+             floatStick(x, y);
+             target = stick;
+         }
+-        if (target == TOOLBAR_OPTIONS || target == TOOLBAR_TOGGLE) {
++        if (target == TOOLBAR_OPTIONS || target == TOOLBAR_TOGGLE || target == TOOLBAR_TELEPORT) {
+             toolbarFingers.put(id, new float[] {px, py, target});
+         } else if (target != NOTHING) {
+             owners.put(id, target);
+@@ -726,6 +777,8 @@
+             showOptions();
+         else if (item == TOOLBAR_TOGGLE)
+             setHidden(!hidden);
++        else if (item == TOOLBAR_TELEPORT)
++            nativeTeleport();
+         performClick();
+     }
+ 
+@@ -742,6 +795,7 @@
              int target = hit(x, y);
              if (target == TOOLBAR_SAVE) {
                  if (saveLayout()) {
@@ -4253,7 +4501,7 @@
                      reset();
                      editing = false;
                      performClick();
-@@ -755,6 +779,12 @@
+@@ -755,6 +809,12 @@
                  dragControl = target;
                  dragOffsetX = x - optionsX();
                  dragOffsetY = y - optionsY();
@@ -4266,7 +4514,7 @@
              } else if (target >= 0) {
                  dragPointer = id;
                  dragControl = target;
-@@ -768,6 +798,8 @@
+@@ -768,6 +828,8 @@
                  float y = logical(event.getY(pointer)) - dragOffsetY;
                  if (dragControl == TOOLBAR_OPTIONS)
                      layout.moveOptions(x, y);
@@ -4275,7 +4523,7 @@
                  else
                      layout.move(dragControl, x, y);
              }
-@@ -778,6 +810,183 @@
+@@ -778,6 +840,183 @@
          }
      }
  
@@ -4459,7 +4707,7 @@
      // ---------- the buttons' names, from the player's profile
  
      private void readBindings() {
-@@ -862,6 +1071,9 @@
+@@ -862,6 +1101,9 @@
                      post(this::showGeneral);
                  } else if (which == 1) {
                      editing = true;
@@ -4469,7 +4717,7 @@
                      setHidden(false);
                  } else {
                      post(this::showSensitivity);
-@@ -1273,6 +1485,8 @@
+@@ -1273,8 +1515,12 @@
              paint.setTextSize(14);
              canvas.drawText("Drag the controls and Options, then push Save", middle,
                  editorY() + toolbarRadius(OPTIONS_RADIUS) + 24, paint);
@@ -4477,8 +4725,12 @@
 +                editorY() + toolbarRadius(OPTIONS_RADIUS) + 42, paint);
          } else {
              toolbarItem(canvas, logicalWidth / 2, toolbarY(), TOOLBAR_RADIUS, hidden ? "Touch" : "Hide", false);
++            if (teleportShown())
++                toolbarItem(canvas, teleportX(), teleportY(), TOOLBAR_RADIUS, "Ir", false);
          }
-@@ -1296,6 +1510,8 @@
+     }
+ 
+@@ -1296,6 +1542,8 @@
              return;
          canvas.save();
          canvas.scale(scale, scale);
