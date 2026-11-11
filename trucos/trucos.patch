@@ -2112,23 +2112,28 @@
  					word overlay_type_flags = game_engine_has_teams() != FALSE;
 --- a/source/interface/hud_weapon.c
 +++ b/source/interface/hud_weapon.c
-@@ -2102,6 +2102,7 @@
- 				weapon_index,
- 				hud_index,
- 				&weapon_state);
-+			hud_port_part = _hud_port_part_weapon;
- 			render_weapon_hud(
- 				hud_index,
- 				player->local_player_index,
-@@ -2110,6 +2111,7 @@
- 				NULL,
- 				NULL,
- 				NULL);
-+			hud_port_part = _hud_port_part_none;
- 			play_weapon_hud_sounds(
- 				player->local_player_index,
- 				hud_index,
-@@ -2127,9 +2129,11 @@
+@@ -981,6 +981,9 @@
+ 	long stack_buffer[STACK_BUFFER_LENGTH];
+ 	boolean firing_active = FALSE;
+ 
++	/* port: the crosshair is no part of the HUD that can be moved (the
++	weapon's HUD, after it, is: render_weapon_hud) */
++	hud_port_part = _hud_port_part_none;
+ 	/* port: project the passenger's shot once for all pieces of its reticle */
+ 	if (!passenger_camera_reticle_begin(player->local_player_index, weapon_index))
+ 		return;
+@@ -1403,6 +1406,10 @@
+ 	short map_type_flags;
+ 	short element_index;
+ 
++	/* port: the weapon's HUD (its parent's too) is the part the HUD editor
++	moves as the ammunition (TRUCOS, HUD: MUNICION); the grenades' after it
++	set their own (render_weapon_and_grenade_hud) */
++	hud_port_part = _hud_port_part_weapon;
+ 	csmemset(
+ 		stack_buffer,
+ 		0x62,
+@@ -2127,9 +2134,11 @@
  			&weapon_state);
  	}
  
@@ -2150,18 +2155,11 @@
  #include "game/game_engine.h"
  #include "game/players.h"
  #include "networking/network_connection.h"
-@@ -117,6 +118,7 @@
+@@ -117,6 +118,14 @@
  #include "interface/hud_definitions.h"
  #include "bitmaps/bitmap_color_conversion.h"
  #include "interface/hud_draw.h"
 +#include "interface/terminal.h" /* port: (the teleport's messages) */
- #include "objects/object_types.h"
- #include "render/render.h"
- #include "render/render_cameras_internal.h"
-@@ -124,6 +126,13 @@
- #include "scenario/scenario_definitions.h"
- #include "units/units.h"
- #include "network_coop.h" /* port: port/linux/game/network_coop.c */
 +#include "ai/path.h" /* port: the guide arrow's route (hud_port_guide_route) */
 +#include "game/game.h"
 +#include "units/bipeds.h" /* (biped_try_and_get) */
@@ -2169,9 +2167,9 @@
 +#include "physics/collision_bsp_definitions.h"
 +#include "structures/structure_bsp_definitions.h"
 +#include <stdlib.h>
- 
- /* ---------- constants */
- 
+ #include "objects/object_types.h"
+ #include "render/render.h"
+ #include "render/render_cameras_internal.h"
 @@ -675,6 +684,14 @@
  	return render_type;
  }
@@ -2207,7 +2205,7 @@
  			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
-@@ -807,6 +828,1129 @@
+@@ -807,6 +828,1133 @@
  	return;
  }
  
@@ -3283,6 +3281,7 @@
 +/* port: when the arrow was last drawn somewhere to go (the teleport button,
 +below) */
 +static unsigned long hud_port_guide_drawn_at = 0;
++static boolean hud_port_guide_target_reachable(real_point3d const *target);
 +
 +static void hud_port_guide_render(
 +	short local_player_index)
@@ -3328,7 +3327,10 @@
 +				0);
 +		hud_port_nav_distance_override = -1.f;
 +		hud_port_nav_color_override = 0;
-+		hud_port_guide_drawn_at = system_milliseconds();
++		/* (the Ir button only for a target in the part of the level that is
++		loaded: one in another part, or outside the level, cannot be gone to) */
++		if (hud_port_guide_target_reachable(&target))
++			hud_port_guide_drawn_at = system_milliseconds();
 +	}
 +
 +	return;
@@ -3337,7 +3339,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +2046,8 @@
+@@ -902,6 +2050,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -3346,7 +3348,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1018,3 +2164,193 @@
+@@ -1018,3 +2168,236 @@
  
  	return;
  }
@@ -3364,6 +3366,9 @@
 +#define GUIDE_TELEPORT_SHOWN_MILLISECONDS 600
 +#define GUIDE_TELEPORT_INSIDE 0.3f
 +#define GUIDE_TELEPORT_BESIDE 1.5f
++#define GUIDE_TELEPORT_RINGS 5
++#define GUIDE_TELEPORT_RING_STEPS 8
++#define GUIDE_TELEPORT_RING_SPACING 2.f
 +
 +static boolean hud_port_guide_teleport_wanted = FALSE;
 +/* where the player was before the teleport, and how many ticks more the
@@ -3381,6 +3386,23 @@
 +
 +	scenario_location_from_point(&location, point);
 +	return location.cluster_index!=NONE;
++}
++
++/* whether the guide's target is in the loaded part of the level: the point,
++the middle of its volume, or between the two */
++static boolean hud_port_guide_target_reachable(
++	real_point3d const *target)
++{
++	real_point3d middle;
++
++	if (hud_port_guide_inside_level(target))
++		return TRUE;
++	if (!hud_port_guide_target_is_volume)
++		return FALSE;
++	middle.x = (target->x+hud_port_guide_target_center.x)*0.5f;
++	middle.y = (target->y+hud_port_guide_target_center.y)*0.5f;
++	middle.z = (target->z+hud_port_guide_target_center.z)*0.5f;
++	return hud_port_guide_inside_level(&middle) || hud_port_guide_inside_level(&hud_port_guide_target_center);
 +}
 +
 +/* a teleport to a point inside the level, else none. The game's teleport
@@ -3525,6 +3547,29 @@
 +			{
 +				floor_point.z += 0.3f;
 +				done = hud_port_guide_teleport_to(player_index, &floor_point);
++			}
++		}
++		/* (else a free floor around it, in rings 2 to 10 meters out: the spot
++		itself can be too tight, or its floor deeper than the first look) */
++		{
++			short ring, step;
++
++			for (ring = 1; !done && ring<=GUIDE_TELEPORT_RINGS; ring++)
++			{
++				for (step = 0; !done && step<GUIDE_TELEPORT_RING_STEPS; step++)
++				{
++					real angle = step*(2*_pi/GUIDE_TELEPORT_RING_STEPS);
++					real_point3d around = start;
++
++					around.x += cosine(angle)*GUIDE_TELEPORT_RING_SPACING*ring;
++					around.y += sine(angle)*GUIDE_TELEPORT_RING_SPACING*ring;
++					around.z += 2.f;
++					if (hud_port_guide_floor(&around, 16.f, &floor_point, &surface_index))
++					{
++						floor_point.z += 0.3f;
++						done = hud_port_guide_teleport_to(player_index, &floor_point);
++					}
++				}
 +			}
 +		}
 +		/* (never to the target itself, with no floor found under it: it can be

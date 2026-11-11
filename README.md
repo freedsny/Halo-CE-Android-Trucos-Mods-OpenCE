@@ -44,7 +44,7 @@ En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 | Camuflaje activo | ON: eres invisible (vuelve aunque mueras). OFF: vuelves a ser visible |
 | Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
 | Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
-| Teletransporte | Aparece un botón **Ir** debajo de Options: al tocarlo te lleva a donde apunta la flecha guía (necesita la flecha guía encendida) |
+| Teletransporte | Aparece un botón **Ir** debajo de Options: al tocarlo te lleva a donde apunta la flecha guía (necesita la flecha guía encendida). Si no cabes justo ahí, busca un sitio libre alrededor (hasta 10 m); si no hay ninguno, no te mueve. El botón no sale cuando el objetivo está en otra parte del mapa que aún no se ha cargado |
 
 Armas, vehículos y powerups funcionan como **botones**: las pones en ON (o eliges el arma o el vehículo), vuelves al juego, se ejecutan una vez y vuelven solas a OFF (o a NINGUNA). Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados: cada misión trae solo los suyos, así que no se puede sacar un Scorpion en una misión que no lo tiene (sale un aviso "no está en este mapa").
 Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro jugador valen sus reglas.
