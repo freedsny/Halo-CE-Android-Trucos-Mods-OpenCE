@@ -4318,7 +4318,7 @@
  };
  
  /* the touch controls' stick at port 0's last read, -1..1, y down */
-@@ -311,7 +326,11 @@
+@@ -311,7 +326,17 @@
  	on-screen keyboard is up, whose keys the fingers then tap) */
  	host_touch_scene(_touch_scene_known | touch_controls_setting() |
  		(menus || !touch_game_playing() || touch_game_cinematic_playing() || (network_chat_controller() == 0) ?
@@ -4328,22 +4328,16 @@
 +		| (hud_port_guide_teleport_ready() ? _touch_scene_teleport : 0)
 +#endif
 +		);
- 	/* (the profile's mapping, for the buttons' names; only when it changes) */
- 	touch_game_button_controls(bindings);
- 	if (!bindings_known || memcmp(bindings, bindings_sent, sizeof(bindings)))
-@@ -321,6 +340,11 @@
- 		host_touch_bindings(bindings);
- 	}
- 	host_touch_read(state);
 +#ifdef HALO_ANDROID
++	/* port: the HUD editor's moves and the teleport button's pushes */
 +	touch_hud_editor();
 +	if (host_touch_teleport())
 +		hud_port_guide_teleport_push();
 +#endif
- 	/* the stick moves the player through the game's input state, whatever
- 	the profile's sticks do (touch_input_move), not as the left stick */
- 	move_x = state[0] / 32767.0f;
-@@ -403,3 +427,103 @@
+ 	/* (the profile's mapping, for the buttons' names; only when it changes) */
+ 	touch_game_button_controls(bindings);
+ 	if (!bindings_known || memcmp(bindings, bindings_sent, sizeof(bindings)))
+@@ -403,3 +428,103 @@
  	host_touch_rumble(left, right);
  }
  #endif
