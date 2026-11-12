@@ -153,6 +153,16 @@ if '"guide.mode", {' not in fuente_c:
     else:
         print("AVISO: no se encontro donde poner la lista de palabras de guide.mode")
 
+# 4c) los menus siempre con los textos de la app (en espanol): por defecto OpenCE los cambia
+# por los de loc.map (en ingles) cuando hay un Halo Custom Edition en custom_maps
+fuente_c = config_c.read_text(encoding="utf-8")
+viejo = '{ "display.menu_language", _config_string, "\\"maps\\""'
+if viejo in fuente_c:
+    config_c.write_text(fuente_c.replace(viejo, '{ "display.menu_language", _config_string, "\\"english\\""'),
+                        encoding="utf-8", newline="")
+else:
+    print("AVISO: no se encontro display.menu_language en port_config.c")
+
 # 5b) los otros bloques de textos (botones, multijugador, seleccion de perfil), en el orden de cada bloque
 import re
 import textos_es
