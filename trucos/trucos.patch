@@ -24,7 +24,7 @@
  
  /* ---------- constants */
  
-@@ -195,10 +199,434 @@
+@@ -195,10 +199,438 @@
  	return;
  }
  
@@ -272,11 +272,15 @@
 +	short choice_count,
 +	boolean vehicle)
 +{
-+	char const *value = config_string(setting);
++	char const *setting_value = config_string(setting);
++	char value[32];
 +	short choice_index;
 +
-+	if (!value || !*value || !strcmp(value, "none"))
++	if (!setting_value || !*setting_value || !strcmp(setting_value, "none"))
 +		return;
++	/* (a copy: writing the setting back changes the string it gives) */
++	strncpy(value, setting_value, sizeof(value)-1);
++	value[sizeof(value)-1] = 0;
 +	config_write(setting, "none");
 +	for (choice_index = 0; choice_index<choice_count && strcmp(choices[choice_index].value, value); choice_index++)
 +		;
@@ -459,7 +463,7 @@
  	if (cheat.controller_enabled)
  	{
  		short local_player_index;
-@@ -310,6 +738,7 @@
+@@ -310,6 +742,7 @@
  	void)
  {
  	cheats_load();
