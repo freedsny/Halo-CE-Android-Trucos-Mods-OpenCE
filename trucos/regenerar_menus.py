@@ -163,6 +163,19 @@ if viejo in fuente_c:
 else:
     print("AVISO: no se encontro display.menu_language en port_config.c")
 
+# 4d) y aunque el config.toml del celular ya diga menu_language = "maps" (el juego lo
+# escribe con todos los valores la primera vez): los menus nunca toman los textos del
+# loc.map, que vienen en ingles y taparian los de la app (en espanol)
+tags_c = pathlib.Path("port/linux/game/menu_tags.c")
+fuente_c = tags_c.read_text(encoding="utf-8")
+viejo = '\tif (!csstrcasecmp(value, "maps"))\n\t\treturn TRUE;\n'
+if viejo in fuente_c:
+    tags_c.write_text(fuente_c.replace(viejo,
+        '\t/* port (trucos): los menus en espanol de la app, nunca los textos del loc.map */\n'
+        '\tif (!csstrcasecmp(value, "maps"))\n\t\treturn FALSE;\n'), encoding="utf-8", newline="")
+else:
+    print("AVISO: no se encontro menus_language_maps en menu_tags.c")
+
 # 5b) los otros bloques de textos (botones, multijugador, seleccion de perfil), en el orden de cada bloque
 import re
 import textos_es
