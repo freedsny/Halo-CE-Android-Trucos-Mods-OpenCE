@@ -24,7 +24,7 @@
  
  /* ---------- constants */
  
-@@ -195,10 +199,438 @@
+@@ -195,10 +199,483 @@
  	return;
  }
  
@@ -234,6 +234,7 @@
 +	{ "plasma_rifle", "weapons\\plasma rifle\\", "RIFLE DE PLASMA" },
 +	{ "needler", "weapons\\needler\\", "NEEDLER" },
 +	{ "fuel_rod", "weapons\\plasma_cannon\\", "CANON DE COMBUSTIBLE" },
++	{ "energy_sword", "weapons\\energy sword\\", "ESPADA DE ENERGIA" },
 +};
 +
 +static struct cheat_port_choice const cheat_port_vehicles[] =
@@ -244,6 +245,8 @@
 +	{ "ghost", "vehicles\\ghost\\", "GHOST" },
 +	{ "banshee", "vehicles\\banshee\\", "BANSHEE" },
 +	{ "turret", "vehicles\\c gun turret\\", "TORRETA COVENANT" },
++	{ "wraith", "vehicles\\wraith\\", "WRAITH" },
++	{ "pelican", "vehicles\\pelican\\", "PELICAN" },
 +};
 +
 +/* whether a tag's name has a folder in it, whatever the case of its letters */
@@ -282,6 +285,48 @@
 +	strncpy(value, setting_value, sizeof(value)-1);
 +	value[sizeof(value)-1] = 0;
 +	config_write(setting, "none");
++	/* "next": the map's weapons (those of the weapons' folder: not the
++	vehicles' guns) or vehicles one after another, each use the next, with its
++	tag's name shown: whatever the map has, the choices above or not */
++	if (!strcmp(value, "next"))
++	{
++		static short next_index[2] = { 0, 0 };
++		struct tag_iterator iterator;
++		struct tag_reference reference;
++		long tag_index;
++		short count = 0, pass;
++
++		reference.index = NONE;
++		for (pass = 0; pass<2 && reference.index==NONE; pass++)
++		{
++			short index = 0;
++
++			tag_iterator_new(&iterator, group);
++			for (tag_index = tag_iterator_next(&iterator); tag_index!=NONE; tag_index = tag_iterator_next(&iterator))
++			{
++				if (!vehicle && !cheat_port_name_has(tag_get_name(tag_index), "weapons\\"))
++					continue;
++				if (pass==1 && index==next_index[vehicle]%count)
++				{
++					reference.index = tag_index;
++					break;
++				}
++				index++;
++			}
++			if (pass==0 && (count = index)==0)
++				break;
++		}
++		if (reference.index!=NONE)
++		{
++			next_index[vehicle] = (short)((next_index[vehicle]%count)+1);
++			terminal_printf(global_real_argb_orange, "%d/%d: %s", next_index[vehicle], count, tag_get_name(reference.index));
++			if (vehicle)
++				cheat_objects_spread(&reference, 1, 8.0f, 6.0f);
++			else
++				cheat_objects(&reference, 1);
++		}
++		return;
++	}
 +	for (choice_index = 0; choice_index<choice_count && strcmp(choices[choice_index].value, value); choice_index++)
 +		;
 +	if (choice_index<choice_count)
@@ -463,7 +508,7 @@
  	if (cheat.controller_enabled)
  	{
  		short local_player_index;
-@@ -310,6 +742,7 @@
+@@ -310,6 +787,7 @@
  	void)
  {
  	cheats_load();
@@ -473,7 +518,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -553,6 +553,164 @@
+@@ -553,6 +553,166 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -549,11 +594,13 @@
 +	{ "cheats.one_weapon", _config_string, "\"none\"", "HALO_CHEATS_ONE_WEAPON", _environment_value, _platform_all,
 +		"One weapon near the player, if this map has it: pistol, assault_rifle,\n"
 +		"shotgun, sniper_rifle, rocket_launcher, flamethrower, plasma_pistol,\n"
-+		"plasma_rifle, needler or fuel_rod. Done once at the next tick of a game that\n"
++		"plasma_rifle, needler, fuel_rod or energy_sword; or next: each use, the next\n"
++		"of the map's weapons, whatever it has. Done once at the next tick of a game that\n"
 +		"is not on a network, then put back to none (pause menu, SETTINGS, TRUCOS)." },
 +	{ "cheats.one_vehicle", _config_string, "\"none\"", "HALO_CHEATS_ONE_VEHICLE", _environment_value, _platform_all,
 +		"One vehicle in front of the player, if this map has it: warthog,\n"
-+		"rocket_warthog, scorpion, ghost, banshee or turret. Done once at the next\n"
++		"rocket_warthog, scorpion, ghost, banshee, turret, wraith or pelican; or next:\n"
++		"each use, the next of the map's vehicles. Done once at the next\n"
 +		"tick of a game that is not on a network, then put back to none." },
 +	{ "cheats.teleport", _config_boolean, "false", "HALO_CHEATS_TELEPORT", _environment_value, _platform_all,
 +		"Teleport: while true, the touch controls show an \"Ir\" button when the\n"
@@ -661,7 +708,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -502,6 +502,181 @@
+@@ -502,6 +502,183 @@
      ],
  }
  
@@ -754,12 +801,14 @@
 +         [("NINGUNA", "none"), ("PISTOLA", "pistol"), ("RIFLE DE ASALTO", "assault_rifle"),
 +          ("ESCOPETA", "shotgun"), ("FRANCOTIRADOR", "sniper_rifle"), ("LANZACOHETES", "rocket_launcher"),
 +          ("LANZALLAMAS", "flamethrower"), ("PISTOLA PLASMA", "plasma_pistol"),
-+          ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler"), ("CANON COMBUSTIBLE", "fuel_rod")],
-+         "Elige un arma y vuelve al juego: cae cerca de ti\\n(si este mapa la tiene) y esto vuelve a NINGUNA.", None),
++          ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler"), ("CANON COMBUSTIBLE", "fuel_rod"),
++          ("ESPADA DE ENERGIA", "energy_sword"), ("SIGUIENTE DEL MAPA", "next")],
++         "Elige y vuelve al juego: cae cerca de ti si el mapa la\\ntiene. SIGUIENTE: una tras otra, todas las del mapa.", None),
 +        ("UN VEHICULO:", "cheats.one_vehicle",
 +         [("NINGUNO", "none"), ("WARTHOG", "warthog"), ("WARTHOG COHETES", "rocket_warthog"),
-+          ("SCORPION", "scorpion"), ("GHOST", "ghost"), ("BANSHEE", "banshee"), ("TORRETA", "turret")],
-+         "Elige un vehiculo y vuelve al juego: aparece frente\\na ti (si este mapa lo tiene) y vuelve a NINGUNO.", None),
++          ("SCORPION", "scorpion"), ("GHOST", "ghost"), ("BANSHEE", "banshee"), ("TORRETA", "turret"),
++          ("WRAITH", "wraith"), ("PELICAN", "pelican"), ("SIGUIENTE DEL MAPA", "next")],
++         "Elige y vuelve al juego: aparece frente a ti si el mapa\\nlo tiene. SIGUIENTE: uno tras otro, todos los del mapa.", None),
 +        ("TODOS LOS POWERUPS:", "cheats.all_powerups", ON_OFF,
 +         "Ponlo en ON y vuelve al juego: caen todos los\\npowerups cerca de ti y esto vuelve solo a OFF.", None),
 +        ("CAMUFLAJE ACTIVO:", "cheats.active_camouflage", ON_OFF,
