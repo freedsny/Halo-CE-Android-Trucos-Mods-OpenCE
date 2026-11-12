@@ -157,7 +157,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK="HaloCE-trucos-${{ steps.version.outputs.ref }}.apk"
+          APK="HaloCE-trucos-${{ steps.version.outputs.ref }}-n${{ github.run_number }}.apk"
           NOTAS="APK de Halo C.E con trucos (OpenCE ${{ steps.version.outputs.ref }}). Trucos: AJUSTES > tu perfil > TRUCOS. En partida: pausa > AJUSTES > TRUCOS."
           CAMBIOS=$(cd repo && git log -1 --format='%s%n%n%b' | grep -v '^Co-Authored-By\|^Claude-Session' | sed '/./,$!d')
           if [ "$GITHUB_REF_NAME" = "main" ]; then
@@ -175,7 +175,7 @@ jobs:
                 --jq '.[] | select((.isDraft or .isPrerelease) and (.name | startswith("PRUEBA"))) | .tagName'); do
               gh release delete "$viejo" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
             done
-            APK="HaloCE-trucos-PRUEBA-${{ steps.version.outputs.ref }}.apk"
+            APK="HaloCE-trucos-PRUEBA-${{ steps.version.outputs.ref }}-n${{ github.run_number }}.apk"
             cp src/dist/halo-android-release/app-release.apk "$APK"
             gh release create "prueba-$(date +%Y%m%d-%H%M)" "$APK" \
               --repo "$GITHUB_REPOSITORY" \
