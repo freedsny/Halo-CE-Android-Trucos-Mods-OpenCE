@@ -10,13 +10,28 @@ Este parche de trucos se creó y se aplica sobre el repositorio oficial de OpenC
 
 ![Jugando en el teléfono: controles táctiles, HUD moderno y flecha guía](capturas/jugando.jpg)
 
+## Contenido
+- [Menús en español](#menús-en-español)
+- [Menú TRUCOS](#menú-trucos) (y [dónde está cada opción](#dónde-está-cada-opción))
+- [Flecha guía](#flecha-guía)
+- [HUD movible](#hud-movible)
+- [HUD moderno](#hud-moderno-opcional)
+- [Radar redondo](#radar-redondo)
+- [Ajustes](#ajustes)
+- [Cómo conseguir el APK](#cómo-conseguir-el-apk)
+- [Cómo está hecho este repositorio](#cómo-está-hecho-este-repositorio)
+
 ## Qué incluye
 
 ### Menús en español
-El menú principal (CAMPAÑA, MULTIJUGADOR, PERFILES, AJUSTES, SALIR), los ajustes del perfil, la selección de perfil, el menú de campaña, el de multijugador y los botones (VOLVER, ACEPTAR, CANCELAR...) están en español. Algunas pantallas internas de OpenCE siguen en inglés.
+El menú principal (CAMPAÑA, MULTIJUGADOR, PERFILES, AJUSTES, SALIR), los ajustes del perfil, la selección de perfil, el menú de campaña, el de multijugador y los botones (VOLVER, ACEPTAR, CANCELAR...) están en español. Las palabras del menú principal y los títulos (TRUCOS, HUD, AJUSTES, GUIA) se dibujan con la fuente de OpenCE y en el mismo estilo que las del juego.
+
+- Los menús quedan en español **siempre**, también si tienes mapas de Custom Edition (con su propio `loc.map`) o un `config.toml` viejo.
+- Algunas pantallas internas de OpenCE (gráficos, controles, red) siguen en inglés.
+- Los textos que salen **durante el juego** (subtítulos, mensajes de la misión) vienen del disco: para tenerlos en español mira **IDIOMA DEL JUEGO** en [Ajustes](#ajustes).
 
 ### Menú TRUCOS
-Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES > TRUCOS**.
+Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES > TRUCOS**. Los cambios se ven al volver al juego, sin reiniciar, y quedan guardados para la próxima vez.
 
 ![El menú TRUCOS](capturas/menu_trucos.jpg)
 
@@ -24,13 +39,13 @@ Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES >
 |---|---|
 | Munición infinita | La munición de reserva nunca se acaba |
 | Sin recargar | El cargador nunca se vacía |
-| Súper salto | Saltas mucho más alto |
-| Modo dios | No mueres por disparos ni caídas |
+| Súper salto | Saltas mucho más alto. Con el **modo dios** apagado, la caída puede matarte |
+| Modo dios | No mueres por disparos ni caídas (sirve junto con el súper salto y el jetpack) |
 | Matar de un golpe | Tus disparos matan al instante |
 | Medusa | Los enemigos que te miran mueren |
-| Jetpack | Puedes volar |
+| Jetpack | Puedes volar. Puede dejar la misión trabada si llegas a donde no deberías: **guarda antes de usarlo** |
 | Poseer al chocar | Al chocar con un enemigo o vehículo lo controlas |
-| Sentir el daño de otros | Cuando otros reciben daño, tu pantalla reacciona como si te golpearan |
+| Sentir el daño de otros | Cuando otros reciben daño, tu pantalla reacciona (sacudida, destellos) como si te golpearan a ti |
 
 En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 
@@ -41,7 +56,7 @@ En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 | Un arma | Eliges una (pistola, rifle de asalto, escopeta, francotirador, lanzacohetes, lanzallamas, pistola o rifle de plasma, needler, cañón de combustible, espada de energía) y cae cerca de ti. **SIGUIENTE DEL MAPA** saca, una por cada uso, todas las armas que el mapa tenga guardadas, con su nombre en pantalla |
 | Un vehículo | Eliges uno (Warthog, Warthog de cohetes, Scorpion, Ghost, Banshee, torreta, Wraith, Pelican) y aparece frente a ti. **SIGUIENTE DEL MAPA** saca, uno por cada uso, todos los vehículos que el mapa tenga guardados (no todos se pueden manejar) |
 | Todos los powerups | Caen todos los powerups cerca de ti |
-| Camuflaje activo | ON: eres invisible (vuelve aunque mueras). OFF: vuelves a ser visible |
+| Camuflaje activo | ON: eres invisible (al disparar se nota un poco, y vuelve aunque mueras). OFF: vuelves a ser visible |
 | Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
 | Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
 | Teletransporte | Aparece un botón **Ir** debajo de Options: al tocarlo te lleva a donde apunta la flecha guía (necesita la flecha guía encendida). Si no cabes justo ahí, busca un sitio libre alrededor (hasta 10 m); si no hay ninguno, no te mueve. El botón no sale cuando el objetivo está en otra parte del mapa que aún no se ha cargado |
@@ -50,6 +65,19 @@ Armas, vehículos y powerups funcionan como **botones**: las pones en ON (o elig
 Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro jugador valen sus reglas.
 
 ![TRUCOS > ARMAS Y VEHICULOS (antes de sumar camuflaje y linterna)](capturas/armas_vehiculos.jpg)
+
+### Dónde está cada opción
+Todo está dentro de **TRUCOS** (pausa > AJUSTES > TRUCOS):
+
+| Pantalla | Qué tiene |
+|---|---|
+| **TRUCOS** | Munición infinita, sin recargar, súper salto, modo dios, matar de un golpe, medusa, jetpack, poseer al chocar, sentir el daño de otros |
+| **ARMAS, LINTERNA Y MAS** | Todas las armas, todos los vehículos, un arma, un vehículo, todos los powerups, camuflaje, luz infinita, linterna amplia, teletransporte |
+| **HUD: ESTILO** | HUD moderno ON/OFF |
+| **HUD: RADAR** | Radar redondo, tamaño del radar, barrido, y moverlo (horizontal y vertical, grueso y fino) |
+| **HUD: ESCUDO / VIDA / MUNICION / GRANADAS** | Mover cada parte (horizontal y vertical, grueso y fino) |
+| **GUIA** | Flecha guía: apagada, objetivo de la misión, aliado o enemigo cercano |
+| **AJUSTES** | Idioma del juego, HDR, exposición, curva de tonos, desbloquear niveles, animaciones mejoradas, bots |
 
 ### Flecha guía
 Una **flecha naranja con la distancia en metros** que te indica hacia dónde ir. Se dibuja igual que los marcadores que el propio juego pone en algunas misiones: una flecha sobre el lugar y los metros debajo. Es naranja para que no se confunda con los niveles que tienen mucho azul. Si lo que busca queda detrás de ti o fuera de la pantalla, la flecha se pega al borde de la pantalla del lado por donde tienes que girar.
@@ -111,13 +139,17 @@ La forma más fácil es **con el dedo**: en partida toca **Options > Edit button
 
 También se puede ajustar con números en **TRUCOS > HUD**, que tiene una pantalla para cada parte. Cada una se mueve en horizontal y vertical con un ajuste **grueso** (de 100 en 100, hasta ±1000) y uno **fino** (de 5 en 5, se suma al grueso): por ejemplo, 625 es 600 y +25. Un número positivo mueve a la derecha o hacia abajo; 0 deja cada parte donde el juego la pone. Lo que mueves con el dedo aparece ahí también. La mira no se puede mover.
 
+- Para volver una parte a su lugar original, pon sus cuatro valores en **0**.
+- El radar también se puede hacer más grande o más pequeño: ver [Radar redondo](#radar-redondo).
+- Si una parte del HUD queda debajo de un botón táctil (por ejemplo, el radar junto a **Options**), mueve una de las dos con el editor.
+
 ### HUD moderno (opcional)
 En **TRUCOS > HUD: ESTILO > HUD MODERNO: ON** el HUD cambia a un estilo como el de los Halo recientes:
 
 - **Escudo**: una barra larga arriba en el centro, de una sola pieza con puntas, en relieve (más clara arriba, más oscura abajo) y con brillo. Se vacía de derecha a izquierda, parpadea cuando está casi vacío y se pone dorado con el sobreescudo.
 - **Vida**: debajo, el "+" en su propia figura y al lado una barra verde agua; se pone roja cuando estás bajo de vida.
 - **Líneas de visor**: salen de los lados, bajan en diagonal y pasan por debajo del escudo.
-- **Radar**: en un panel de ocho lados con anillos, cruz, marcas y la flecha del jugador.
+- **Radar**: en un panel de ocho lados con anillos, cruz, marcas y la flecha del jugador. Solo se ve con **RADAR REDONDO: OFF**; con el radar redondo encendido (como viene), se usa el redondo también en el HUD moderno.
 
 La munición y las granadas siguen siendo las del juego. Las partes nuevas también se mueven con el dedo en el editor de botones.
 
@@ -132,34 +164,67 @@ El estilo se basó en esta **imagen de referencia**. Es una ilustración, no una
 ![Imagen de referencia del HUD moderno (ilustración)](capturas/hud_referencia.jpg)
 
 ### Radar redondo
-El radar es un disco verde azulado transparente con el borde brillante, dos anillos, rayitas cortas y un rombo rojo en el borde que apunta hacia tu objetivo (el mismo que marca la flecha guía de TRUCOS > GUIA; sin objetivo, el rombo no se ve). Viene activado y reemplaza al radar del mapa y al panel del HUD moderno. Para volver al de antes: **TRUCOS > HUD: RADAR > RADAR REDONDO: OFF**.
+El radar del juego cambia por un **disco redondo verde azulado**, inspirado en el de Halo: Spartan Assault. Viene **activado**.
 
-El tamaño se cambia en **TRUCOS > HUD: RADAR > TAMANO DEL RADAR**, de 70% a 150% (viene en 115%). Crece con sus puntos, así que las distancias siguen siendo correctas. Funciona con el radar redondo y con el del HUD moderno.
+![El radar redondo en el juego](capturas/radar_redondo.jpg)
 
-### Radar con barrido
-El radar tiene encima un barrido que gira (verde azulado sobre el radar redondo, azul en los demás) (y, con el HUD original y sin el radar redondo, una cruz y dos anillos). Para quitarlo: **TRUCOS > HUD: RADAR > RADAR CON BARRIDO: OFF**.
+![El radar redondo de cerca](capturas/radar_redondo_cerca.jpg)
+
+*(Capturas de la primera versión: ahí el rombo rojo todavía estaba fijo abajo. Ahora se mueve hacia el objetivo.)*
+
+Cómo es:
+- **Disco transparente** verde azulado, un poco más fuerte hacia el borde, para que el piso se siga viendo debajo.
+- **Borde brillante** con un resplandor suave alrededor.
+- **Dos anillos** adentro y **rayitas cortas**: ocho cerca del borde y cuatro en el anillo del medio.
+- **Base oscura y línea oscura fina** por fuera del borde, para que el radar no se pierda cuando el fondo es muy claro (el cielo de la playa en The Silent Cartographer, la nieve).
+- Los **puntos** son los del juego: rojo los enemigos, amarillo los aliados. Se mueven igual que siempre.
+
+#### El rombo rojo
+El rombo rojo del borde del radar **apunta hacia tu objetivo**: el mismo lugar que marca la [flecha guía](#flecha-guía). (No es el mismo rombo naranja de la flecha guía que se explica en [Cuándo sale el rombo](#cuándo-sale-el-rombo): ese está en la pantalla, este en el radar.)
+- Se mueve por el borde según hacia dónde mires: si el objetivo queda a tu izquierda, el rombo sale a la izquierda; si queda detrás, sale abajo.
+- Igual que la flecha, apunta a la **siguiente esquina del camino**, no a través de las paredes.
+- **Solo se ve con la flecha guía encendida** (TRUCOS > GUIA) y cuando hay un objetivo. Si la flecha no se muestra, el rombo tampoco.
+
+#### Opciones (TRUCOS > HUD: RADAR)
+| Opción | Qué hace |
+|---|---|
+| **RADAR REDONDO** | ON (como viene): el radar redondo. OFF: el radar de antes (el del juego, o el panel de ocho lados con el HUD moderno) |
+| **TAMANO DEL RADAR** | De **70%** a **150%**, de 5 en 5. Viene en **115%**. Los puntos crecen con el radar, así que las distancias siguen siendo correctas. Funciona con el radar redondo y con el del HUD moderno; el radar original del juego es una imagen del mapa y no cambia de tamaño |
+| **RADAR CON BARRIDO** | Un barrido que gira sobre el radar, una vuelta cada tres segundos: verde azulado sobre el radar redondo, azul en los demás. Con el HUD original y sin el radar redondo, también dibuja una cruz y dos anillos. OFF: sin barrido |
+| **RADAR HORIZONTAL / VERTICAL** (y FINO) | Moverlo de lugar, como las demás partes del HUD (o con el dedo en el editor) |
+
+Para tener el **radar original del juego, tal cual**: RADAR REDONDO OFF, RADAR CON BARRIDO OFF y, en HUD: ESTILO, HUD MODERNO OFF.
 
 ### Ajustes
 En **TRUCOS > AJUSTES**:
 
 ![TRUCOS > AJUSTES](capturas/ajustes.jpg)
 
-- **Idioma del juego**: con una copia europea del juego (que trae español), los textos que vienen del disco salen en español. Cambia al reiniciar.
-- **HDR, exposición y curva de tonos**: activar HDR y subir la exposición ayuda cuando el juego se ve oscuro; puede bajar la fluidez.
-- **Desbloquear niveles** de la campaña (solo para perfiles nuevos).
-- **Animaciones mejoradas**.
-- **Bots** para partidas locales de Slayer a pantalla dividida: cantidad, nivel y equipos.
+| Opción | Valores | Qué hace |
+|---|---|---|
+| **IDIOMA DEL JUEGO** | Inglés, español, francés, alemán, italiano, japonés | El idioma de los textos que vienen del disco (subtítulos, mensajes). Depende de tu copia: una europea trae español e italiano. Cambia al **reiniciar** el juego |
+| **HDR (MAS BRILLO)** | ON / OFF | Necesario para la exposición. Si el juego se ve oscuro, actívalo. Puede bajar la fluidez |
+| **EXPOSICION HDR** | 0.5 a 4.0 | El brillo de la imagen con HDR: más es más claro, 1.0 es lo normal |
+| **CURVA DE TONOS HDR** | Neutral, ACES, Reinhard | Neutral: la imagen como es. ACES: más contraste. Reinhard: más suave y más oscura |
+| **DESBLOQUEAR NIVELES** | ON / OFF | Los perfiles **nuevos** empiezan con todos los niveles de la campaña abiertos. Los perfiles que ya tienes no cambian |
+| **ANIMACIONES MEJORADAS** | ON / OFF | Las piernas siguen moviéndose al lanzar granadas, y los pasajeros sueltan el agarre al recargar |
+| **BOTS (CANTIDAD)** | 0 a 15 | Bots en partidas **locales de Slayer a pantalla dividida**. 0: ninguno |
+| **BOTS (NIVEL)** | Fácil, normal, heroico, legendario | Qué tan bien juegan |
+| **BOTS (EQUIPOS)** | Repartidos, contra mí | Repartidos en los dos equipos, o todos en el equipo contrario |
+
+Si el juego se ve muy oscuro: **HDR ON**, y sube la **EXPOSICION** a 1.5 o 2.0.
 
 ### Otros detalles
 - La app se llama **Halo C.E**.
 - Las versiones se firman siempre con la misma llave, así que cada APK nuevo **se instala encima del anterior sin borrar tu partida**.
+- El juego **no busca actualizaciones oficiales** de OpenCE por su cuenta (borrarían los trucos): las versiones nuevas llegan por este repositorio (ver [Actualización automática](#actualización-automática)).
 
 ## Cómo conseguir el APK
 
 El APK se compila solo con **GitHub Actions** a partir del código oficial de OpenCE, al que se le aplica el parche (`trucos/trucos.patch`).
 
 1. Entra a la pestaña **Releases** (Lanzamientos) de este repositorio.
-2. Descarga el APK de la versión más reciente (marcada como "Latest"). Su nombre lleva la versión de OpenCE con la que se compiló y el número de la versión, el mismo del título (#96), por ejemplo `HaloCE-trucos-build-347-n96.apk`.
+2. Descarga el APK de la versión más reciente (marcada como "Latest"). Su nombre lleva la versión de OpenCE con la que se compiló y el número de la versión, el mismo del título (#103), por ejemplo `HaloCE-trucos-build-359-n103.apk`.
 3. Instálalo en tu celular (puede pedirte permitir instalar apps de fuentes desconocidas).
 
 Para compilar una versión nueva: **Actions > Compilar OpenCE con trucos (APK) > Run workflow**. Por defecto usa la última versión de OpenCE; también puedes escribir una específica, por ejemplo `build-335`.
@@ -186,6 +251,7 @@ Este repositorio **no es un fork** del código de OpenCE: solo guarda los cambio
 | `trucos/menu_es.py` | Dibuja en español las palabras del menú principal y los títulos |
 | `trucos/header_*.png` | Los títulos TRUCOS, HUD, AJUSTES y GUIA |
 | `capturas/` | Las capturas de este README |
+| `trucos/README.md` | Una nota corta sobre la carpeta `trucos/` |
 | `LICENSE` | La licencia GNU AGPL v3, la misma de OpenCE |
 
 Si OpenCE cambia las partes que toca el parche, la compilación puede fallar en el paso "Aplicar los trucos" y habrá que ajustar el parche.
@@ -193,6 +259,6 @@ Si OpenCE cambia las partes que toca el parche, la compilación puede fallar en 
 ## Créditos y licencia
 
 - **OpenCE** y todo el código del juego: [OpenCommunityEdition/OpenCE](https://github.com/OpenCommunityEdition/OpenCE), bajo la licencia **GNU AGPL v3**. Los cambios de este repositorio se comparten bajo esa misma licencia (ver [LICENSE](LICENSE)).
-- Trucos y menús en español, flecha guía, HUD movible y compilación automática: **freddVelp** ([@freedsny](https://github.com/freedsny)).
+- Trucos y menús en español, flecha guía, HUD movible, HUD moderno, radar redondo y compilación automática: **freddVelp** ([@freedsny](https://github.com/freedsny)).
 - La flecha de objetivo usa solo los nombres de los scripts de cada misión como referencia; no incluye scripts ni datos del juego.
 - Halo: Combat Evolved © Microsoft Corporation.

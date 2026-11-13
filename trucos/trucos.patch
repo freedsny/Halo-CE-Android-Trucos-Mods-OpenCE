@@ -760,7 +760,7 @@
 +        ("ARMAS, LINTERNA Y MAS:", "network_setup/cheats_items",
 +         "Armas, vehiculos y powerups cerca de ti, camuflaje,\\nla linterna y el teletransporte."),
 +        ("HUD: ESTILO:", "network_setup/cheats_hud_estilo",
-+         "El HUD original o el moderno: escudo y vida en\\nbarras largas arriba y radar en un panel."),
++         "El HUD original o el moderno: escudo y vida\\nen barras largas arriba en el centro."),
 +        ("HUD: RADAR:", "network_setup/cheats_hud_radar",
 +         "Radar redondo, el barrido, y moverlo a otro\\nlugar de la pantalla."),
 +        ("HUD: ESCUDO:", "network_setup/cheats_hud_shield",
@@ -806,7 +806,7 @@
 +        ("TODAS LAS ARMAS:", "cheats.all_weapons", ON_OFF,
 +         "Ponlo en ON y vuelve al juego: caen todas las armas\\ncerca de ti y esto vuelve solo a OFF.", None),
 +        ("TODOS LOS VEHICULOS:", "cheats.all_vehicles", ON_OFF,
-+         "Ponlo en ON y vuelve al juego: caen todos los\\nvehiculos sobre ti y esto vuelve solo a OFF.", None),
++         "Ponlo en ON y vuelve al juego: caen en circulo\\nalrededor de ti, separados. Vuelve solo a OFF.", None),
 +        ("UN ARMA:", "cheats.one_weapon",
 +         [("NINGUNA", "none"), ("PISTOLA", "pistol"), ("RIFLE DE ASALTO", "assault_rifle"),
 +          ("ESCOPETA", "shotgun"), ("FRANCOTIRADOR", "sniper_rifle"), ("LANZACOHETES", "rocket_launcher"),
@@ -835,18 +835,18 @@
 +    "screen": "cheats_hud_estilo_screen", "header": ("header_hud", f"{PE}/network_setup/cheats/header_hud"), "spacing": 30,
 +    "rows": [
 +        ("HUD MODERNO:", "hud.modern", ON_OFF,
-+         "ON: escudo y vida en barras largas arriba en el\\ncentro, y el radar en un panel con anillos.", None),
++         "ON: escudo y vida en barras largas arriba en el\\ncentro. El radar: ver HUD: RADAR.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_hud_radar"] = {
 +    "screen": "cheats_hud_radar_screen", "header": ("header_hud", f"{PE}/network_setup/cheats/header_hud"), "spacing": 30,
 +    "rows": [
 +        ("RADAR REDONDO:", "hud.radar_round", ON_OFF,
-+         "Disco verde azulado, borde brillante, anillos\\ny una marca roja abajo. OFF: el radar de antes.", None),
++         "Disco verde azulado; su rombo rojo apunta a tu\\nobjetivo (TRUCOS > GUIA). OFF: el de antes.", None),
 +        ("TAMANO DEL RADAR:", "hud.radar_size", RADAR_SIZE_VALUES,
 +         "Mas grande o mas pequeno, con sus puntos.\\n100%: el tamano del juego.", None),
 +        ("RADAR CON BARRIDO:", "hud.radar_sweep", ON_OFF,
-+         "Un barrido que gira, una cruz y anillos azules\nsobre el radar. OFF: el radar original.", None),
++         "Un barrido que gira sobre el radar.\\nOFF: sin barrido.", None),
 +    ] + _hud_rows("radar", "RADAR", "Donde esta el radar."),
 +}
 +SCREENS["network_setup/cheats_hud_shield"] = {
