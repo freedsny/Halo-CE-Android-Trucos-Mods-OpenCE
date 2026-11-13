@@ -935,7 +935,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -1011,6 +1017,1219 @@ pixel32 real_alpha_intensity_to_pixel32(
+@@ -1011,6 +1017,1225 @@ pixel32 real_alpha_intensity_to_pixel32(
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -1852,6 +1852,7 @@
 +#define HUD_PORT_ROUND 0x6FD6CB
 +#define HUD_PORT_ROUND_LIGHT 0xBDF4EC
 +#define HUD_PORT_ROUND_MARK 0xE5323A
++#define HUD_PORT_ROUND_SHADE 0x03161A
 +
 +boolean hud_port_radar_round(
 +	void)
@@ -1964,6 +1965,9 @@
 +	/* the glow outside the edge */
 +	hud_port_ring_fade(x, y, big, big+9.0f*s, hud_port_color(0.34f, HUD_PORT_ROUND),
 +		hud_port_color(0.0f, HUD_PORT_ROUND), 64);
++	/* a dark base under the disc, so that it shows over bright skies too */
++	hud_port_ring_fade(x, y, 0.0f, big, hud_port_color(0.30f, HUD_PORT_ROUND_SHADE),
++		hud_port_color(0.42f, HUD_PORT_ROUND_SHADE), 48);
 +	/* the disc: a see-through teal, a little stronger towards the edge, and the
 +	middle circle a little lighter */
 +	hud_port_ring_fade(x, y, 0.0f, big*0.36f, hud_port_color(0.27f, HUD_PORT_ROUND),
@@ -1988,6 +1992,8 @@
 +
 +	/* the edge: a soft band and a bright line */
 +	hud_port_ring(x, y, big, 3.0f*line, hud_port_color(0.28f, HUD_PORT_ROUND), 64);
++	/* (a thin dark line just outside it, so that it shows over bright skies) */
++	hud_port_ring(x, y, big+1.4f*line, 1.0f*line, hud_port_color(0.5f, HUD_PORT_ROUND_SHADE), 64);
 +	hud_port_ring(x, y, big, 1.1f*line, hud_port_color(0.88f, HUD_PORT_ROUND_LIGHT), 64);
 +
 +	/* the red diamond on the bottom edge: a red rim, light inside, with a
@@ -2155,7 +2161,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1084,6 +2303,12 @@ void hud_calculate_point(
+@@ -1084,6 +2309,12 @@ void hud_calculate_point(
  			placement->offset.y * scale;
  	}
  
@@ -2168,7 +2174,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1607,6 +2832,8 @@ static void hud_draw_bitmap_internal(
+@@ -1607,6 +2838,8 @@ static void hud_draw_bitmap_internal(
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
