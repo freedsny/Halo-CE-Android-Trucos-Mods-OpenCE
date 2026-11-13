@@ -131,8 +131,11 @@ El estilo se basó en esta **imagen de referencia**. Es una ilustración, no una
 
 ![Imagen de referencia del HUD moderno (ilustración)](capturas/hud_referencia.jpg)
 
+### Radar redondo
+El radar es un disco verde azulado transparente con el borde brillante, dos anillos, rayitas cortas y un rombo rojo en el borde de abajo. Viene activado y reemplaza al radar del mapa y al panel del HUD moderno. Para volver al de antes: **TRUCOS > HUD: RADAR > RADAR REDONDO: OFF**.
+
 ### Radar con barrido
-El radar tiene encima un barrido azul que gira (y, con el HUD original, una cruz y dos anillos). Para quitarlo: **TRUCOS > HUD: RADAR > RADAR CON BARRIDO: OFF**.
+El radar tiene encima un barrido que gira (verde azulado sobre el radar redondo, azul en los demás) (y, con el HUD original y sin el radar redondo, una cruz y dos anillos). Para quitarlo: **TRUCOS > HUD: RADAR > RADAR CON BARRIDO: OFF**.
 
 ### Ajustes
 En **TRUCOS > AJUSTES**:
