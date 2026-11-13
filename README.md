@@ -166,7 +166,7 @@ El estilo se basó en esta **imagen de referencia**. Es una ilustración, no una
 ### Radar redondo
 El radar del juego cambia por un **disco redondo verde azulado**, inspirado en el de Halo: Spartan Assault. Viene **activado**.
 
-![El radar redondo en el juego, en The Library](capturas/radar_redondo.jpg)
+![El radar redondo en el juego](capturas/radar_redondo.jpg)
 
 *El rombo rojo del radar (arriba a la derecha del borde) apunta hacia el mismo lado que el marcador de la flecha guía, a 201,9 m a la derecha.*
 
