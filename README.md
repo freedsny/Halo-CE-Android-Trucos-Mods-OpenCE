@@ -8,7 +8,7 @@ Este parche de trucos se creó y se aplica sobre el repositorio oficial de OpenC
 
 > Proyecto no oficial de un aficionado. No tiene relación con Microsoft, Xbox Game Studios, Halo Studios, Activision ni Bungie. Halo y Halo: Combat Evolved son marcas de Microsoft Corporation. **No incluye el juego**: necesitas tu propia copia (imagen de disco de Xbox, `.iso` o `.xiso`), como pide OpenCE.
 
-![Jugando en el teléfono: controles táctiles, HUD moderno y flecha guía](capturas/jugando.jpg)
+![Jugando en el teléfono: controles táctiles, HUD moderno, radar redondo y flecha guía](capturas/jugando.jpg)
 
 ## Contenido
 - [Menús en español](#menús-en-español)
@@ -96,7 +96,7 @@ El cambio se ve al volver al juego, sin reiniciar. La elección se guarda.
 
 ![TRUCOS > GUIA](capturas/guia.jpg)
 
-![La flecha guía (flecha doble y metros) en un pasillo](capturas/flecha_y_hud_moderno.jpg)
+![La flecha guía (flecha doble y metros) en un pasillo](capturas/flecha_guia.jpg)
 
 #### Objetivo de la misión
 - En la campaña, cada misión tiene zonas invisibles que hacen avanzar la historia cuando entras en ellas (abrir una puerta, que llegue un Pelican, la siguiente escena). La flecha **lee en vivo qué zona está esperando la misión** y apunta a ella.
@@ -157,7 +157,7 @@ Es una **modificación opcional**: puedes dejar el **HUD original** del juego (O
 
 ![TRUCOS > HUD: ESTILO](capturas/hud_moderno_opcion.jpg)
 
-![El HUD moderno en el juego: escudo, vida y radar](capturas/flecha_y_hud_moderno.jpg)
+![El HUD moderno con RADAR REDONDO: OFF (el radar en el panel de ocho lados)](capturas/flecha_y_hud_moderno.jpg)
 
 El estilo se basó en esta **imagen de referencia**. Es una ilustración, no una captura del juego: el paisaje y la munición/granadas de la imagen no son parte de esta versión, solo la idea del escudo, la vida y el radar.
 
@@ -166,11 +166,11 @@ El estilo se basó en esta **imagen de referencia**. Es una ilustración, no una
 ### Radar redondo
 El radar del juego cambia por un **disco redondo verde azulado**, inspirado en el de Halo: Spartan Assault. Viene **activado**.
 
-![El radar redondo en el juego](capturas/radar_redondo.jpg)
+![El radar redondo en el juego, en The Library](capturas/radar_redondo.jpg)
 
-![El radar redondo de cerca](capturas/radar_redondo_cerca.jpg)
+*El rombo rojo del radar (arriba a la derecha del borde) apunta hacia el mismo lado que el marcador de la flecha guía, a 201,9 m a la derecha.*
 
-*(Capturas de la primera versión: ahí el rombo rojo todavía estaba fijo abajo. Ahora se mueve hacia el objetivo.)*
+![El radar redondo de cerca, con el barrido](capturas/radar_redondo_cerca.jpg)
 
 Cómo es:
 - **Disco transparente** verde azulado, un poco más fuerte hacia el borde, para que el piso se siga viendo debajo.
