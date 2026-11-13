@@ -132,7 +132,7 @@ El estilo se basó en esta **imagen de referencia**. Es una ilustración, no una
 ![Imagen de referencia del HUD moderno (ilustración)](capturas/hud_referencia.jpg)
 
 ### Radar redondo
-El radar es un disco verde azulado transparente con el borde brillante, dos anillos, rayitas cortas y un rombo rojo en el borde de abajo. Viene activado y reemplaza al radar del mapa y al panel del HUD moderno. Para volver al de antes: **TRUCOS > HUD: RADAR > RADAR REDONDO: OFF**.
+El radar es un disco verde azulado transparente con el borde brillante, dos anillos, rayitas cortas y un rombo rojo en el borde que apunta hacia tu objetivo (el mismo que marca la flecha guía de TRUCOS > GUIA; sin objetivo, el rombo no se ve). Viene activado y reemplaza al radar del mapa y al panel del HUD moderno. Para volver al de antes: **TRUCOS > HUD: RADAR > RADAR REDONDO: OFF**.
 
 El tamaño se cambia en **TRUCOS > HUD: RADAR > TAMANO DEL RADAR**, de 70% a 150% (viene en 115%). Crece con sus puntos, así que las distancias siguen siendo correctas. Funciona con el radar redondo y con el del HUD moderno.
 

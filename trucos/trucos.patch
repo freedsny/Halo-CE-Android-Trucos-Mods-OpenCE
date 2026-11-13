@@ -935,7 +935,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -1011,6 +1017,1225 @@ pixel32 real_alpha_intensity_to_pixel32(
+@@ -1011,6 +1017,1261 @@ pixel32 real_alpha_intensity_to_pixel32(
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -1846,7 +1846,7 @@
 +
 +In place of the map's pictures: a see-through teal disc with a glowing edge,
 +two thin rings and short dashes inside, and a small hollow red diamond on its
-+bottom edge. The blips are drawn over it (the
++edge toward where the guide arrow points. The blips are drawn over it (the
 +map's), and the sweep (hud.radar_sweep) turns in teal. */
 +
 +#define HUD_PORT_ROUND 0x6FD6CB
@@ -1917,20 +1917,47 @@
 +	}
 +}
 +
-+/* a diamond around (x, y), half its width across */
++/* the guide arrow's direction for the round radar's diamond, each local
++player's: the game time it was last told and the angle */
++static long hud_port_radar_objective_times[4] = { NONE, NONE, NONE, NONE };
++static real hud_port_radar_objective_angles[4];
++
++void hud_port_radar_objective(
++	short local_player_index,
++	real angle)
++{
++	hud_port_radar_objective_times[local_player_index & 3] = game_time_get();
++	hud_port_radar_objective_angles[local_player_index & 3] = angle;
++}
++
++/* a diamond's points around (x, y), half its length across, its tips along
++(dx, dy) (a unit vector) and across it */
++static void hud_port_diamond_points(
++	real x,
++	real y,
++	real half,
++	real dx,
++	real dy,
++	real_point2d *points)
++{
++	points[0].x = x+dx*half; points[0].y = y+dy*half;
++	points[1].x = x-dy*half; points[1].y = y+dx*half;
++	points[2].x = x-dx*half; points[2].y = y-dy*half;
++	points[3].x = x+dy*half; points[3].y = y-dx*half;
++}
++
 +static void hud_port_diamond(
 +	real x,
 +	real y,
 +	real half,
++	real dx,
++	real dy,
 +	pixel32 color)
 +{
 +	real_point2d points[4];
 +	pixel32 colors[4];
 +
-+	points[0].x = x; points[0].y = y-half;
-+	points[1].x = x+half; points[1].y = y;
-+	points[2].x = x; points[2].y = y+half;
-+	points[3].x = x-half; points[3].y = y;
++	hud_port_diamond_points(x, y, half, dx, dy, points);
 +	colors[0] = colors[1] = colors[2] = colors[3] = color;
 +	hud_port_quad(points, colors);
 +}
@@ -1953,6 +1980,7 @@
 +}
 +
 +static void hud_port_radar_round_draw(
++	short local_player_index,
 +	real x,
 +	real y,
 +	real r,
@@ -1996,21 +2024,29 @@
 +	hud_port_ring(x, y, big+1.4f*line, 1.0f*line, hud_port_color(0.5f, HUD_PORT_ROUND_SHADE), 64);
 +	hud_port_ring(x, y, big, 1.1f*line, hud_port_color(0.88f, HUD_PORT_ROUND_LIGHT), 64);
 +
-+	/* the red diamond on the bottom edge: a red rim, light inside, with a
-+	small one in the middle */
++	/* the red diamond on the edge, toward where the guide arrow points (TRUCOS,
++	GUIA): a red rim, light inside, a small one in the middle, its tips along
++	the radius. Not drawn when the arrow is not (no target, or the guide off) */
 +	{
-+		real mark_y = y+big;
-+		real outer = 4.6f*s, inner = outer-MAX(1.0f, 1.1f*s);
-+		real_point2d points[4];
++		long told = hud_port_radar_objective_times[local_player_index & 3];
++		long now = game_time_get();
 +
-+		points[0].x = x; points[0].y = mark_y-outer;
-+		points[1].x = x+outer; points[1].y = mark_y;
-+		points[2].x = x; points[2].y = mark_y+outer;
-+		points[3].x = x-outer; points[3].y = mark_y;
-+		hud_port_diamond(x, mark_y, inner, hud_port_color(0.35f, hud_port_mix(HUD_PORT_ROUND_MARK, 0xFFFFFF, 0.6f)));
-+		hud_port_polygon_band(points, 4, -(outer-inner), 0.0f, hud_port_color(0.95f, HUD_PORT_ROUND_MARK),
-+			hud_port_color(0.95f, HUD_PORT_ROUND_MARK));
-+		hud_port_diamond(x, mark_y, 1.5f*s, hud_port_color(0.95f, HUD_PORT_ROUND_MARK));
++		if (told!=NONE && now>=told && now-told<=2)
++		{
++			real angle = hud_port_radar_objective_angles[local_player_index & 3];
++			/* (the player's facing is up; an angle to the left is to the left) */
++			real dx = -(real)sin(angle), dy = -(real)cos(angle);
++			real mark_x = x+dx*big, mark_y = y+dy*big;
++			real outer = 4.6f*s, inner = outer-MAX(1.0f, 1.1f*s);
++			real_point2d points[4];
++
++			hud_port_diamond_points(mark_x, mark_y, outer, dx, dy, points);
++			hud_port_diamond(mark_x, mark_y, inner, dx, dy,
++				hud_port_color(0.35f, hud_port_mix(HUD_PORT_ROUND_MARK, 0xFFFFFF, 0.6f)));
++			hud_port_polygon_band(points, 4, -(outer-inner), 0.0f, hud_port_color(0.95f, HUD_PORT_ROUND_MARK),
++				hud_port_color(0.95f, HUD_PORT_ROUND_MARK));
++			hud_port_diamond(mark_x, mark_y, 1.5f*s, dx, dy, hud_port_color(0.95f, HUD_PORT_ROUND_MARK));
++		}
 +	}
 +}
 +
@@ -2034,7 +2070,7 @@
 +	r = radius_units*s;
 +	if (hud_port_radar_round())
 +	{
-+		hud_port_radar_round_draw((real)center->x, (real)center->y, r, s);
++		hud_port_radar_round_draw(local_player_index, (real)center->x, (real)center->y, r, s);
 +		return;
 +	}
 +	half = r*1.18f;
@@ -2161,7 +2197,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1084,6 +2309,12 @@ void hud_calculate_point(
+@@ -1084,6 +2345,12 @@ void hud_calculate_point(
  			placement->offset.y * scale;
  	}
  
@@ -2174,7 +2210,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1607,6 +2838,8 @@ static void hud_draw_bitmap_internal(
+@@ -1607,6 +2874,8 @@ static void hud_draw_bitmap_internal(
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
@@ -2185,7 +2221,7 @@
  	{
 --- a/source/interface/hud_draw.h
 +++ b/source/interface/hud_draw.h
-@@ -71,6 +71,64 @@ long fast_ftol_C(
+@@ -71,6 +71,70 @@ long fast_ftol_C(
  pixel32 real_alpha_intensity_to_pixel32(
  	real alpha,
  	real intensity);
@@ -2246,6 +2282,12 @@
 +the round radar and the modern HUD's; 1 for the maps' pictures */
 +real hud_port_radar_size(
 +	void);
++/* port: where the guide arrow points (hud_nav_points.c), for the round radar's
++red diamond: the angle from the player's facing, to the left positive; drawn
++on the radar's edge while it is told it each tick */
++void hud_port_radar_objective(
++	short local_player_index,
++	real angle);
 +
  void hud_calculate_point(
  	short local_player_index,
@@ -2415,7 +2457,7 @@
  		get_hud_state(player->local_player_index)->last_weapon_index = weapon_index;
 --- a/source/interface/hud_nav_points.c
 +++ b/source/interface/hud_nav_points.c
-@@ -101,6 +101,7 @@
+@@ -102,6 +102,7 @@ symbols in this file:
  #include "cseries/cseries.h"
  #include "cseries/errors.h"
  #include "game_state.h"
@@ -2423,7 +2465,7 @@
  #include "game/game_engine.h"
  #include "game/players.h"
  #include "networking/network_connection.h"
-@@ -117,6 +118,14 @@
+@@ -118,6 +119,14 @@ symbols in this file:
  #include "interface/hud_definitions.h"
  #include "bitmaps/bitmap_color_conversion.h"
  #include "interface/hud_draw.h"
@@ -2438,7 +2480,7 @@
  #include "objects/object_types.h"
  #include "render/render.h"
  #include "render/render_cameras_internal.h"
-@@ -675,6 +684,14 @@
+@@ -677,6 +686,14 @@ short hud_get_nav_point_render_type(
  	return render_type;
  }
  
@@ -2453,7 +2495,7 @@
  void custom_render_nav_point(
  	short local_player_index,
  	real_point3d const *position_pointer,
-@@ -701,6 +718,10 @@
+@@ -703,6 +720,10 @@ void custom_render_nav_point(
  		unit_get_camera_position(local_player_get_player_index(local_player_index) == NONE ? NONE : player_get(local_player_get_player_index(local_player_index))->unit_index, &cam_pos);
  		distance = distance3d(&cam_pos, position_pointer);
  	}
@@ -2464,7 +2506,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -763,7 +784,7 @@
+@@ -766,7 +787,7 @@ void custom_render_nav_point(
  			corner.x = (short)screen_position.x;
  			corner.y = (short)screen_position.y;
  			alpha = PIN(255 * fast_ftol_C(arrow->opacity), 0, 255);
@@ -2473,7 +2515,7 @@
  			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
-@@ -807,6 +828,1133 @@
+@@ -810,6 +831,1148 @@ void custom_render_nav_point(
  	return;
  }
  
@@ -3569,6 +3611,21 @@
 +
 +		unit_get_head_position(unit_index, &head_position);
 +		hud_port_guide_route_point(local_player_index, unit_index, &target, target_object_index, &point);
++		/* (the round radar's red diamond points the same way) */
++		{
++			real_point3d origin;
++			real dx, dy;
++
++			object_get_origin(unit_index, &origin);
++			dx = point.x-origin.x;
++			dy = point.y-origin.y;
++			if (dx*dx+dy*dy>0.25f)
++			{
++				hud_port_radar_objective(
++					local_player_index,
++					(real)atan2(dy, dx)-player_control_get_facing_angles(local_player_index)->yaw);
++			}
++		}
 +		/* (the distance map's work for this tick, while it is not done) */
 +		hud_port_guide_map_step();
 +		point_object_index = point.x==target.x && point.y==target.y && point.z==target.z ?
@@ -3607,7 +3664,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -902,6 +2050,8 @@
+@@ -905,6 +2068,8 @@ void hud_render_nav_points(
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -3616,7 +3673,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1018,3 +2168,236 @@
+@@ -1023,3 +2188,236 @@ void hud_update_nav_points(
  
  	return;
  }
