@@ -518,7 +518,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -582,6 +582,170 @@ static const struct config_setting config_settings[] =
+@@ -582,6 +582,174 @@ static const struct config_setting config_settings[] =
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -674,6 +674,10 @@
 +		"The round radar (pause menu, SETTINGS, TRUCOS, HUD: RADAR): a see-through teal\n"
 +		"disc with a glowing edge, rings, dashes and a red mark at its bottom, in\n"
 +		"place of the map's pictures (and of the modern HUD's panel). false: as before." },
++	{ "hud.radar_size", _config_integer, "115", "HALO_HUD_RADAR_SIZE", _environment_value, _platform_all,
++		"The radar's size in percent, 70 to 150 (pause menu, SETTINGS, TRUCOS, HUD:\n"
++		"RADAR): the round radar and the modern HUD's, with their blips. 100: the\n"
++		"maps' size. The maps' own radar pictures keep theirs." },
 +	{ "hud.ammo_fx", _config_integer, "0", "HALO_HUD_AMMO_FX", _environment_value, _platform_all,
 +		"The fine adjustment of hud.ammo_x, added to it: so 625 is 600 and 25.\n"
 +		"In HUD units (the tags' 640x480). 0: none." },
@@ -712,7 +716,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -555,6 +555,185 @@ SCREENS["network_setup/streamer_mode"] = {
+@@ -555,6 +555,189 @@ SCREENS["network_setup/streamer_mode"] = {
      ],
  }
  
@@ -729,6 +733,8 @@
 +HUD_FINE_STEPS = list(range(-50, 51, 5))
 +HUD_VALUES = [(f"{step:+d}" if step else "0", str(step)) for step in HUD_STEPS]
 +HUD_FINE_VALUES = [(f"{step:+d}" if step else "0", str(step)) for step in HUD_FINE_STEPS]
++# the radar's size in percent (hud.radar_size)
++RADAR_SIZE_VALUES = [(f"{size}%", str(size)) for size in range(70, 155, 5)]
 +
 +
 +def _hud_rows(part: str, name: str, help_text: str) -> list:
@@ -837,6 +843,8 @@
 +    "rows": [
 +        ("RADAR REDONDO:", "hud.radar_round", ON_OFF,
 +         "Disco verde azulado, borde brillante, anillos\\ny una marca roja abajo. OFF: el radar de antes.", None),
++        ("TAMANO DEL RADAR:", "hud.radar_size", RADAR_SIZE_VALUES,
++         "Mas grande o mas pequeno, con sus puntos.\\n100%: el tamano del juego.", None),
 +        ("RADAR CON BARRIDO:", "hud.radar_sweep", ON_OFF,
 +         "Un barrido que gira, una cruz y anillos azules\nsobre el radar. OFF: el radar original.", None),
 +    ] + _hud_rows("radar", "RADAR", "Donde esta el radar."),
@@ -927,7 +935,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -1011,6 +1017,1201 @@ pixel32 real_alpha_intensity_to_pixel32(
+@@ -1011,6 +1017,1219 @@ pixel32 real_alpha_intensity_to_pixel32(
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -1861,6 +1869,24 @@
 +	return enabled;
 +}
 +
++real hud_port_radar_size(
++	void)
++{
++	static unsigned long changes = 0;
++	static boolean read = FALSE;
++	static long size = 100;
++
++	if (!read || changes!=config_changes())
++	{
++		read = TRUE;
++		changes = config_changes();
++		size = PIN(config_integer("hud.radar_size"), 70, 150);
++	}
++	if (!hud_port_radar_round() && !hud_port_style_modern())
++		return 1.0f;
++	return (real)size/100.0f;
++}
++
 +/* a ring from radius inner (inner_color) to radius outer (outer_color) */
 +static void hud_port_ring_fade(
 +	real x,
@@ -2129,7 +2155,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1084,6 +2285,12 @@ void hud_calculate_point(
+@@ -1084,6 +2303,12 @@ void hud_calculate_point(
  			placement->offset.y * scale;
  	}
  
@@ -2142,7 +2168,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1607,6 +2814,8 @@ static void hud_draw_bitmap_internal(
+@@ -1607,6 +2832,8 @@ static void hud_draw_bitmap_internal(
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
@@ -2153,7 +2179,7 @@
  	{
 --- a/source/interface/hud_draw.h
 +++ b/source/interface/hud_draw.h
-@@ -71,6 +71,60 @@ long fast_ftol_C(
+@@ -71,6 +71,64 @@ long fast_ftol_C(
  pixel32 real_alpha_intensity_to_pixel32(
  	real alpha,
  	real intensity);
@@ -2209,6 +2235,10 @@
 +/* port: the round radar (TRUCOS, HUD: RADAR, hud.radar_round): drawn by
 +hud_port_radar_panel in place of the map's pictures */
 +boolean hud_port_radar_round(
++	void);
++/* port: the radar's size, as a factor (hud.radar_size: 0.7 to 1.5), for
++the round radar and the modern HUD's; 1 for the maps' pictures */
++real hud_port_radar_size(
 +	void);
 +
  void hud_calculate_point(
@@ -2301,28 +2331,40 @@
  					{
  						hud_draw_static_element(
  							local_player_index,
-@@ -1209,10 +1235,20 @@ void hud_render_unit_interface(
+@@ -1209,10 +1235,28 @@ void hud_render_unit_interface(
  						local_player_count() > 1,
  						0.0f,
  						&corner);
-+					/* port: the modern HUD's panel, or the round radar, under the blips */
-+					hud_port_radar_panel(
-+						local_player_index,
-+						&corner,
-+						hud_globals->defaults.motion_sensor_scale);
- 					motion_sensor_draw_screen(
- 						local_player_index,
- 						local_player_count() > 1,
- 						&corner);
-+					/* port: the radar's sweep and rings over it */
-+					hud_port_radar_sweep(
-+						local_player_index,
-+						&corner,
-+						hud_globals->defaults.motion_sensor_scale);
+-					motion_sensor_draw_screen(
+-						local_player_index,
+-						local_player_count() > 1,
+-						&corner);
++					{
++						/* port: the radar's size (hud.radar_size): its units, and so
++						its blips' distances, grown for its drawing */
++						real port_radar_scale = hud_globals->defaults.motion_sensor_scale;
++
++						hud_globals->defaults.motion_sensor_scale = port_radar_scale*hud_port_radar_size();
++						/* port: the modern HUD's panel, or the round radar, under the blips */
++						hud_port_radar_panel(
++							local_player_index,
++							&corner,
++							hud_globals->defaults.motion_sensor_scale);
++						motion_sensor_draw_screen(
++							local_player_index,
++							local_player_count() > 1,
++							&corner);
++						/* port: the radar's sweep and rings over it */
++						hud_port_radar_sweep(
++							local_player_index,
++							&corner,
++							hud_globals->defaults.motion_sensor_scale);
++						hud_globals->defaults.motion_sensor_scale = port_radar_scale;
++					}
  					/* port: the text chat goes above it: the top of its circle, as
  					far above the blips' centre as the picture's left edge is left
  					of it (the picture is taller than the circle) */
-@@ -1223,6 +1259,7 @@ void hud_render_unit_interface(
+@@ -1223,6 +1267,7 @@ void hud_render_unit_interface(
  					}
  				}
  
