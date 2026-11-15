@@ -24,7 +24,7 @@
  
  /* ---------- constants */
  
-@@ -195,10 +199,483 @@
+@@ -195,10 +199,499 @@
  	return;
  }
  
@@ -388,6 +388,7 @@
 +void hud_port_guide_teleport_update(void); /* (hud_nav_points.c: TELETRANSPORTE) */
 +static boolean cheat_port_infinite_flashlight = FALSE;
 +static boolean cheat_port_camouflage = FALSE;
++static boolean cheat_port_overshield = FALSE;
 +static boolean cheat_port_camouflage_on = FALSE;
 +static boolean cheat_port_wide_flashlight = FALSE;
 +
@@ -399,6 +400,20 @@
 +
 +	if (player_index!=NONE && player_get(player_index)->unit_index!=NONE)
 +		unit = unit_get(player_get(player_index)->unit_index);
++	/* the overshield (TRUCOS, SOBRESCUDO INFINITO): charged again to its three
++	times whenever it is below them and the shield is not stunned by a hit (as
++	the powerup does: object_double_charge_shield), so it only goes down while
++	the player is being shot */
++	if (unit && own_game && cheat_port_overshield &&
++		!TEST_FLAG(unit->object.damage_flags, _object_dead_bit) &&
++		unit->object.maximum_shield_vitality>0.f &&
++		!TEST_FLAG(unit->object.damage_flags, _object_shield_over_charging_bit) &&
++		unit->object.shield_stun_ticks==0 && unit->object.shield_vitality<3.f)
++	{
++		SET_FLAG(unit->object.damage_flags, _object_shield_over_charging_bit, TRUE);
++		if (unit->object.shield_vitality==0.f)
++			unit->object.shield_vitality = 0.01f;
++	}
 +	if (unit && own_game && cheat_port_infinite_flashlight)
 +		unit->unit.integrated_light_battery = 1.0f;
 +	if (unit && own_game && cheat_port_camouflage)
@@ -444,6 +459,7 @@
 +		cheat_settings_changes = changes;
 +		cheat_port_infinite_flashlight = config_boolean("cheats.infinite_flashlight")!=0;
 +		cheat_port_camouflage = config_boolean("cheats.active_camouflage")!=0;
++		cheat_port_overshield = config_boolean("cheats.overshield")!=0;
 +		cheat_port_wide_flashlight = config_boolean("cheats.wide_flashlight")!=0;
 +		for (index = 0; index<(short)NUMBER_OF_CHEAT_SETTINGS; index++)
 +		{
@@ -508,7 +524,7 @@
  	if (cheat.controller_enabled)
  	{
  		short local_player_index;
-@@ -310,6 +787,7 @@
+@@ -310,6 +803,7 @@
  	void)
  {
  	cheats_load();
@@ -518,7 +534,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -582,6 +582,174 @@ static const struct config_setting config_settings[] =
+@@ -553,6 +553,178 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -587,6 +603,10 @@
 +		"Active camouflage: the player is invisible while it is true (again after a\n"
 +		"death); false: the player shows again. In a game that is not on a network\n"
 +		"(pause menu, SETTINGS, TRUCOS). Not in another host's game: its rules." },
++	{ "cheats.overshield", _config_boolean, "false", "HALO_CHEATS_OVERSHIELD", _environment_value, _platform_all,
++		"Infinite overshield: the shield is charged to three times again whenever it\n"
++		"is not being hit, as the overshield powerup does. In a game that is not on a\n"
++		"network (pause menu, SETTINGS, TRUCOS). Not in another host's game: its rules." },
 +	{ "cheats.infinite_flashlight", _config_boolean, "false", "HALO_CHEATS_INFINITE_FLASHLIGHT", _environment_value, _platform_all,
 +		"Infinite flashlight: its battery stays full, so it never goes out.\n"
 +		"In a game that is not on a network (pause menu, SETTINGS, TRUCOS).\n"
@@ -716,7 +736,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -555,6 +555,189 @@ SCREENS["network_setup/streamer_mode"] = {
+@@ -502,6 +502,192 @@
      ],
  }
  
@@ -801,7 +821,8 @@
 +    ],
 +}
 +SCREENS["network_setup/cheats_items"] = {
-+    "screen": "cheats_items_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"), "spacing": 30,
++    # (ten rows: a 27px step, as Graphics', keeps the last one clear of the help)
++    "screen": "cheats_items_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"), "spacing": 27,
 +    "rows": [
 +        ("TODAS LAS ARMAS:", "cheats.all_weapons", ON_OFF,
 +         "Ponlo en ON y vuelve al juego: caen todas las armas\\ncerca de ti y esto vuelve solo a OFF.", None),
@@ -821,6 +842,8 @@
 +         "Elige y vuelve al juego: aparece frente a ti si el mapa\\nlo tiene. SIGUIENTE: uno tras otro, todos los del mapa.", None),
 +        ("TODOS LOS POWERUPS:", "cheats.all_powerups", ON_OFF,
 +         "Ponlo en ON y vuelve al juego: caen todos los\\npowerups cerca de ti y esto vuelve solo a OFF.", None),
++        ("SOBRESCUDO INFINITO:", "cheats.overshield", ON_OFF,
++         "El escudo amarillo del powerup, siempre: se vuelve\\na cargar cuando dejan de dispararte.", None),
 +        ("CAMUFLAJE ACTIVO:", "cheats.active_camouflage", ON_OFF,
 +         "ON: eres invisible (al disparar se nota un poco).\\nOFF: vuelves a ser visible.", None),
 +        ("LUZ INFINITA:", "cheats.infinite_flashlight", ON_OFF,
@@ -908,7 +931,7 @@
  # would drop the game (internet play) or are for the main menu (the router,
 --- a/source/interface/hud_draw.c
 +++ b/source/interface/hud_draw.c
-@@ -110,6 +110,9 @@ symbols in this file:
+@@ -108,6 +108,9 @@
  #include "cache_file_formats.h" /* port: port/linux/game/cache_file_formats.c */
  #include "custom_edition_cache.h"
  #include "view_fov.h" /* port: port/linux/game/view_fov.c */
@@ -918,7 +941,7 @@
  
  /* ---------- constants */
  
-@@ -391,6 +394,8 @@ static void hud_calculate_bitmap_bounds(
+@@ -389,6 +392,8 @@
  	real_rectangle2d const *clip,
  	real_rectangle2d *bounds,
  	boolean is_interface_bitmap);
@@ -927,7 +950,7 @@
  static void hud_draw_bitmap_internal(
  	void *meter_parameters,
  	struct bitmap_data const *bitmap,
-@@ -981,6 +986,7 @@ static void hud_draw_multitexture_overlay(
+@@ -969,6 +974,7 @@
  		}
  	}
  
@@ -935,7 +958,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -1011,6 +1017,1261 @@ pixel32 real_alpha_intensity_to_pixel32(
+@@ -999,6 +1005,1261 @@
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -2197,7 +2220,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1084,6 +2345,12 @@ void hud_calculate_point(
+@@ -1067,6 +2328,12 @@
  			placement->offset.y * scale;
  	}
  
@@ -2210,7 +2233,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1607,6 +2874,8 @@ static void hud_draw_bitmap_internal(
+@@ -1590,6 +2857,8 @@
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
@@ -2221,7 +2244,7 @@
  	{
 --- a/source/interface/hud_draw.h
 +++ b/source/interface/hud_draw.h
-@@ -71,6 +71,70 @@ long fast_ftol_C(
+@@ -71,6 +71,70 @@
  pixel32 real_alpha_intensity_to_pixel32(
  	real alpha,
  	real intensity);
@@ -2294,7 +2317,7 @@
  	struct hud_absolute_placement_definition const *absolute_placement,
 --- a/source/interface/hud_unit.c
 +++ b/source/interface/hud_unit.c
-@@ -815,6 +815,7 @@ void hud_render_unit_interface(
+@@ -811,6 +811,7 @@
  
  	unit_hud_shield_meter_mapper_tick();
  	unit_hud_outline_mapper_tick();
@@ -2302,7 +2325,7 @@
  
  	if (player->local_player_index == render.local_player_index &&
  		player->unit_index != NONE)
-@@ -913,7 +914,14 @@ void hud_render_unit_interface(
+@@ -909,7 +910,14 @@
  				struct unit_hud_interface_definition *hud_definition =
  					unit_hud_interface_definition_get(unit_hud_indices[unit_count]);
  
@@ -2318,7 +2341,7 @@
  				{
  					short draw_flags = 0;
  
-@@ -933,7 +941,8 @@ void hud_render_unit_interface(
+@@ -929,7 +937,8 @@
  						NONE);
  				}
  
@@ -2328,7 +2351,7 @@
  					!TEST_FLAG(
  						unit_hud_globals->script_flags,
  						_hud_panel_shield_dont_show_bit))
-@@ -1053,7 +1062,20 @@ void hud_render_unit_interface(
+@@ -1049,7 +1058,20 @@
  					}
  				}
  
@@ -2350,7 +2373,7 @@
  					unit_hud_globals->script_flags,
  					_hud_panel_health_dont_show_bit))
  				{
-@@ -1144,6 +1166,7 @@ void hud_render_unit_interface(
+@@ -1140,6 +1162,7 @@
  					hud_state->last_body_vitality = hud_unit->object.body_vitality;
  				}
  
@@ -2358,7 +2381,7 @@
  				if (unit_count == 0 &&
  					!TEST_FLAG(
  						unit_hud_globals->script_flags,
-@@ -1178,7 +1201,9 @@ void hud_render_unit_interface(
+@@ -1174,7 +1197,9 @@
  						hud_state->last_motion_sensor_flash_time = NONE;
  					}
  
@@ -2369,7 +2392,7 @@
  					{
  						/* port: none, unless it is drawn (its bitmap can be missing) */
  						hud_draw_last_left = NONE;
-@@ -1191,7 +1216,8 @@ void hud_render_unit_interface(
+@@ -1187,7 +1212,8 @@
  						/* port: where it is (the text chat goes above it) */
  						motion_sensor_left = hud_draw_last_left;
  					}
@@ -2379,7 +2402,7 @@
  					{
  						hud_draw_static_element(
  							local_player_index,
-@@ -1209,10 +1235,28 @@ void hud_render_unit_interface(
+@@ -1205,10 +1231,28 @@
  						local_player_count() > 1,
  						0.0f,
  						&corner);
@@ -2412,7 +2435,7 @@
  					/* port: the text chat goes above it: the top of its circle, as
  					far above the blips' centre as the picture's left edge is left
  					of it (the picture is taller than the circle) */
-@@ -1223,6 +1267,7 @@ void hud_render_unit_interface(
+@@ -1219,6 +1263,7 @@
  					}
  				}
  
@@ -2457,7 +2480,7 @@
  		get_hud_state(player->local_player_index)->last_weapon_index = weapon_index;
 --- a/source/interface/hud_nav_points.c
 +++ b/source/interface/hud_nav_points.c
-@@ -102,6 +102,7 @@ symbols in this file:
+@@ -101,6 +101,7 @@
  #include "cseries/cseries.h"
  #include "cseries/errors.h"
  #include "game_state.h"
@@ -2465,7 +2488,7 @@
  #include "game/game_engine.h"
  #include "game/players.h"
  #include "networking/network_connection.h"
-@@ -118,6 +119,14 @@ symbols in this file:
+@@ -117,6 +118,14 @@
  #include "interface/hud_definitions.h"
  #include "bitmaps/bitmap_color_conversion.h"
  #include "interface/hud_draw.h"
@@ -2480,7 +2503,7 @@
  #include "objects/object_types.h"
  #include "render/render.h"
  #include "render/render_cameras_internal.h"
-@@ -677,6 +686,14 @@ short hud_get_nav_point_render_type(
+@@ -675,6 +684,14 @@
  	return render_type;
  }
  
@@ -2495,7 +2518,7 @@
  void custom_render_nav_point(
  	short local_player_index,
  	real_point3d const *position_pointer,
-@@ -703,6 +720,10 @@ void custom_render_nav_point(
+@@ -701,6 +718,10 @@
  		unit_get_camera_position(local_player_get_player_index(local_player_index) == NONE ? NONE : player_get(local_player_get_player_index(local_player_index))->unit_index, &cam_pos);
  		distance = distance3d(&cam_pos, position_pointer);
  	}
@@ -2506,7 +2529,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -766,7 +787,7 @@ void custom_render_nav_point(
+@@ -763,7 +784,7 @@
  			corner.x = (short)screen_position.x;
  			corner.y = (short)screen_position.y;
  			alpha = PIN(255 * fast_ftol_C(arrow->opacity), 0, 255);
@@ -2515,7 +2538,7 @@
  			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
-@@ -810,6 +831,1148 @@ void custom_render_nav_point(
+@@ -807,6 +828,1148 @@
  	return;
  }
  
@@ -3664,7 +3687,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -905,6 +2068,8 @@ void hud_render_nav_points(
+@@ -902,6 +2065,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -3673,7 +3696,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1023,3 +2188,236 @@ void hud_update_nav_points(
+@@ -1018,3 +2183,236 @@
  
  	return;
  }

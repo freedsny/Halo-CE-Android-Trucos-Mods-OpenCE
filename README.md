@@ -56,6 +56,7 @@ En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 | Un arma | Eliges una (pistola, rifle de asalto, escopeta, francotirador, lanzacohetes, lanzallamas, pistola o rifle de plasma, needler, cañón de combustible, espada de energía) y cae cerca de ti. **SIGUIENTE DEL MAPA** saca, una por cada uso, todas las armas que el mapa tenga guardadas, con su nombre en pantalla |
 | Un vehículo | Eliges uno (Warthog, Warthog de cohetes, Scorpion, Ghost, Banshee, torreta, Wraith, Pelican) y aparece frente a ti. **SIGUIENTE DEL MAPA** saca, uno por cada uso, todos los vehículos que el mapa tenga guardados (no todos se pueden manejar) |
 | Todos los powerups | Caen todos los powerups cerca de ti |
+| Sobrescudo infinito | El escudo amarillo del powerup (tres veces más fuerte), siempre: solo baja mientras te disparan y se vuelve a cargar solo |
 | Camuflaje activo | ON: eres invisible (al disparar se nota un poco, y vuelve aunque mueras). OFF: vuelves a ser visible |
 | Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
 | Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
