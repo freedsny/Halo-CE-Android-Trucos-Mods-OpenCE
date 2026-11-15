@@ -18,6 +18,7 @@ Este parche de trucos se creó y se aplica sobre el repositorio oficial de OpenC
 - [HUD moderno](#hud-moderno-opcional)
 - [Radar redondo](#radar-redondo)
 - [Ajustes](#ajustes)
+- [Que vaya fluido y no se caliente](#que-vaya-fluido-y-no-se-caliente)
 - [Cómo conseguir el APK](#cómo-conseguir-el-apk)
 - [Cómo está hecho este repositorio](#cómo-está-hecho-este-repositorio)
 
@@ -56,7 +57,7 @@ En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 | Un arma | Eliges una (pistola, rifle de asalto, escopeta, francotirador, lanzacohetes, lanzallamas, pistola o rifle de plasma, needler, cañón de combustible, espada de energía) y cae cerca de ti. **SIGUIENTE DEL MAPA** saca, una por cada uso, todas las armas que el mapa tenga guardadas, con su nombre en pantalla |
 | Un vehículo | Eliges uno (Warthog, Warthog de cohetes, Scorpion, Ghost, Banshee, torreta, Wraith, Pelican) y aparece frente a ti. **SIGUIENTE DEL MAPA** saca, uno por cada uso, todos los vehículos que el mapa tenga guardados (no todos se pueden manejar) |
 | Todos los powerups | Caen todos los powerups cerca de ti |
-| Sobrescudo infinito | El escudo amarillo del powerup (tres veces más fuerte), siempre: solo baja mientras te disparan y se vuelve a cargar solo |
+| Sobrescudo infinito | El escudo amarillo del powerup (tres veces más fuerte), siempre: baja mientras te disparan y, cuando dejan de dispararte, se vuelve a cargar solo hasta el triple. No te hace invencible (para eso está el **modo dios**). OFF: el sobrescudo que te quede se gasta como el del powerup normal |
 | Camuflaje activo | ON: eres invisible (al disparar se nota un poco, y vuelve aunque mueras). OFF: vuelves a ser visible |
 | Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
 | Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
@@ -73,7 +74,7 @@ Todo está dentro de **TRUCOS** (pausa > AJUSTES > TRUCOS):
 | Pantalla | Qué tiene |
 |---|---|
 | **TRUCOS** | Munición infinita, sin recargar, súper salto, modo dios, matar de un golpe, medusa, jetpack, poseer al chocar, sentir el daño de otros |
-| **ARMAS, LINTERNA Y MAS** | Todas las armas, todos los vehículos, un arma, un vehículo, todos los powerups, camuflaje, luz infinita, linterna amplia, teletransporte |
+| **ARMAS, LINTERNA Y MAS** | Todas las armas, todos los vehículos, un arma, un vehículo, todos los powerups, sobrescudo infinito, camuflaje, luz infinita, linterna amplia, teletransporte |
 | **HUD: ESTILO** | HUD moderno ON/OFF |
 | **HUD: RADAR** | Radar redondo, tamaño del radar, barrido, y moverlo (horizontal y vertical, grueso y fino) |
 | **HUD: ESCUDO / VIDA / MUNICION / GRANADAS** | Mover cada parte (horizontal y vertical, grueso y fino) |
@@ -215,9 +216,22 @@ En **TRUCOS > AJUSTES**:
 
 Si el juego se ve muy oscuro: **HDR ON**, y sube la **EXPOSICION** a 1.5 o 2.0.
 
+### Que vaya fluido y no se caliente
+En **AJUSTES > tu perfil > VIDEO** (o pausa > AJUSTES > VIDEO):
+
+| Opción | Recomendado | Por qué |
+|---|---|---|
+| **ESCALA DE RESOLUCION** | **75%** (50% si se sigue calentando) | Es lo que más alivia al teléfono; en una pantalla de celular casi no se nota |
+| **V-SYNC** | ON | No dibuja cuadros que la pantalla no alcanza a mostrar |
+| **LIMITE DE CUADROS** | **30** | El Halo original iba a 30 en la Xbox. A 60 se ve más suave, pero el teléfono trabaja el doble |
+| **EFECTOS EXTRA** | Apagar lo que no te importe | Son efectos que el juego original no tenía y gastan gráficos |
+
+El **HDR** (TRUCOS > AJUSTES) también gasta: si el teléfono se calienta, prueba apagarlo o bajar la exposición, aunque algunos niveles se verán más oscuros. Ayuda también no jugar mientras el teléfono carga.
+
 ### Otros detalles
 - La app se llama **Halo C.E**.
 - Las versiones se firman siempre con la misma llave, así que cada APK nuevo **se instala encima del anterior sin borrar tu partida**.
+- Al entrar a una partida **en línea** con un mapa que no tienes, el juego lo **descarga solo** (con sus `bitmaps.map`, `sounds.map` y `loc.map`) a la carpeta `custom_maps`. No es nada dañino; si no quieres que lo haga, apaga **AJUSTES > tu perfil > RED > MAP SHARING**.
 - El juego **no busca actualizaciones oficiales** de OpenCE por su cuenta (borrarían los trucos): las versiones nuevas llegan por este repositorio (ver [Actualización automática](#actualización-automática)).
 
 ## Cómo conseguir el APK
@@ -225,7 +239,7 @@ Si el juego se ve muy oscuro: **HDR ON**, y sube la **EXPOSICION** a 1.5 o 2.0.
 El APK se compila solo con **GitHub Actions** a partir del código oficial de OpenCE, al que se le aplica el parche (`trucos/trucos.patch`).
 
 1. Entra a la pestaña **Releases** (Lanzamientos) de este repositorio.
-2. Descarga el APK de la versión más reciente (marcada como "Latest"). Su nombre lleva la versión de OpenCE con la que se compiló y el número de la versión, el mismo del título (#103), por ejemplo `HaloCE-trucos-build-359-n103.apk`.
+2. Descarga el APK de la versión más reciente (marcada como "Latest"). Su nombre lleva la versión de OpenCE con la que se compiló y el número de la versión, el mismo del título: por ejemplo, la versión **(#106)** se descarga como `HaloCE-trucos-build-365-n106.apk`. Así sabes cuál es la más nueva sin abrir la página.
 3. Instálalo en tu celular (puede pedirte permitir instalar apps de fuentes desconocidas).
 
 Para compilar una versión nueva: **Actions > Compilar OpenCE con trucos (APK) > Run workflow**. Por defecto usa la última versión de OpenCE; también puedes escribir una específica, por ejemplo `build-335`.
@@ -260,6 +274,6 @@ Si OpenCE cambia las partes que toca el parche, la compilación puede fallar en 
 ## Créditos y licencia
 
 - **OpenCE** y todo el código del juego: [OpenCommunityEdition/OpenCE](https://github.com/OpenCommunityEdition/OpenCE), bajo la licencia **GNU AGPL v3**. Los cambios de este repositorio se comparten bajo esa misma licencia (ver [LICENSE](LICENSE)).
-- Trucos y menús en español, flecha guía, HUD movible, HUD moderno, radar redondo y compilación automática: **freddVelp** ([@freedsny](https://github.com/freedsny)).
+- Trucos (armas y vehículos a elección, sobrescudo infinito, linterna, teletransporte y más), menús en español, flecha guía, HUD movible, HUD moderno, radar redondo y compilación automática: **freddVelp** ([@freedsny](https://github.com/freedsny)).
 - La flecha de objetivo usa solo los nombres de los scripts de cada misión como referencia; no incluye scripts ni datos del juego.
 - Halo: Combat Evolved © Microsoft Corporation.
