@@ -958,7 +958,7 @@
  	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
  
  	match_assert_stack_frame("c:\\halo\\SOURCE\\interface\\hud_draw.c", 1372);
-@@ -999,6 +1005,1261 @@
+@@ -999,6 +1005,1266 @@
  	return real_argb_color_to_pixel32(&color);
  }
  
@@ -1726,6 +1726,9 @@
 +	real x = left+(right-left)*PIN(fill, 0.0f, 1.0f);
 +	real height = bottom-top;
 +	short lit_count, band_count;
++	boolean background = alpha>=0.0f;
++
++	alpha = background ? alpha : -alpha;
 +
 +	if (fill>0.0f)
 +	{
@@ -1748,7 +1751,9 @@
 +			hud_port_polygon_fill(line, line_count, hud_port_color(alpha*0.55f, 0xFFFFFF));
 +		}
 +	}
-+	if (fill<1.0f)
++	/* (the empty part dark: not for an overshield, drawn over the full shield,
++	whose blue shows where the overshield is gone: a negative alpha) */
++	if (fill<1.0f && background)
 +	{
 +		band_count = hud_port_polygon_clip(shape, count, -1.0f, 0.0f, -x, band);
 +		hud_port_polygon_fill(band, band_count, hud_port_color(0.55f, HUD_PORT_PANEL));
@@ -1813,7 +1818,7 @@
 +		if (shield_vitality>1.0f)
 +		{
 +			hud_port_relief_bar(points, 6, x, x+width, y, y+height, MIN((shield_vitality-1.0f)/2.0f, 1.0f),
-+				HUD_PORT_OVERSHIELD, 1.0f, s, TRUE);
++				HUD_PORT_OVERSHIELD, -1.0f, s, TRUE);
 +		}
 +	}
 +
@@ -2220,7 +2225,7 @@
  void hud_calculate_point(
  	short local_player_index,
  	struct hud_absolute_placement_definition const *absolute_placement,
-@@ -1067,6 +2328,12 @@
+@@ -1067,6 +2333,12 @@
  			placement->offset.y * scale;
  	}
  
@@ -2233,7 +2238,7 @@
  	if (bitmap_data)
  	{
  		switch (corner)
-@@ -1590,6 +2857,8 @@
+@@ -1590,6 +2862,8 @@
  	hud_draw_last_left = SHORT_MAX;
  	for (vertex_index = 0; vertex_index < 4; vertex_index++)
  		hud_draw_last_left = (short)MIN(hud_draw_last_left, vertices[vertex_index].position.x);
