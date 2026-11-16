@@ -57,7 +57,7 @@ En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 | Un arma | Eliges una (pistola, rifle de asalto, escopeta, francotirador, lanzacohetes, lanzallamas, pistola o rifle de plasma, needler, cañón de combustible, espada de energía) y cae cerca de ti. **SIGUIENTE DEL MAPA** saca, una por cada uso, todas las armas que el mapa tenga guardadas, con su nombre en pantalla |
 | Un vehículo | Eliges uno (Warthog, Warthog de cohetes, Scorpion, Ghost, Banshee, torreta, Wraith, Pelican) y aparece frente a ti. **SIGUIENTE DEL MAPA** saca, uno por cada uso, todos los vehículos que el mapa tenga guardados (no todos se pueden manejar) |
 | Todos los powerups | Caen todos los powerups cerca de ti |
-| Sobrescudo infinito | El escudo amarillo del powerup (tres veces más fuerte), siempre: baja mientras te disparan y, cuando dejan de dispararte, se vuelve a cargar solo hasta el triple. No te hace invencible (para eso está el **modo dios**). OFF: el sobrescudo que te quede se gasta como el del powerup normal |
+| Sobrescudo infinito | El escudo amarillo del powerup (tres veces más fuerte), siempre: se vuelve a cargar solo cuando dejan de dispararte. Ver [cómo funciona](#sobrescudo-infinito) |
 | Camuflaje activo | ON: eres invisible (al disparar se nota un poco, y vuelve aunque mueras). OFF: vuelves a ser visible |
 | Luz infinita | La linterna nunca se apaga: su batería siempre está llena |
 | Linterna amplia | La linterna alumbra 1,7 veces más lejos y con un cono más ancho |
@@ -65,6 +65,21 @@ En **TRUCOS > ARMAS, LINTERNA Y MAS**:
 
 Armas, vehículos y powerups funcionan como **botones**: las pones en ON (o eliges el arma o el vehículo), vuelves al juego, se ejecutan una vez y vuelven solas a OFF (o a NINGUNA). Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados: cada misión trae solo los suyos, así que no se puede sacar un Scorpion en una misión que no lo tiene (sale un aviso "no está en este mapa").
 Los trucos **solo funcionan en partidas que no son en red**. En el juego de otro jugador valen sus reglas.
+
+#### Sobrescudo infinito
+Es el mismo **sobrescudo** del powerup (el cubo que hace que el escudo se ponga amarillo), pero que no se acaba. El escudo tiene dos capas: la **azul**, el escudo normal, y encima la **amarilla**, el sobrescudo, que vale el doble que la azul. En total aguantas el triple.
+
+![El sobrescudo infinito en el HUD moderno, paso a paso](capturas/sobrescudo.jpg)
+
+1. Al activarlo, el escudo se carga hasta el triple y la barra se pone toda **amarilla**.
+2. Cuando te disparan, primero baja el **amarillo**. En el HUD moderno se achica desde la derecha y deja ver el azul lleno debajo.
+3. Cuando se acaba el amarillo queda el **azul** lleno, y si te siguen disparando baja el azul como siempre.
+4. Cuando dejan de dispararte, el juego espera un momento y recarga el **azul**; en cuanto está lleno, vuelve el **amarillo** hasta llenar la barra otra vez.
+
+- No te hace invencible: si te disparan mucho seguido o te cae una granada, puedes morir igual. Para no morir nunca está el **modo dios**.
+- La **pistola de plasma cargada** de los enemigos borra el escudo completo de un golpe, con sobrescudo o sin él, como en el juego original.
+- Al ponerlo en **OFF**, el sobrescudo que te quede se gasta con los disparos como el del powerup normal y ya no vuelve.
+- Funciona igual con el **HUD original** y con el **moderno**: lo que cambia es solo cómo se dibuja la barra. El HUD original usa la barra del escudo del juego, que muestra el sobrescudo con sus propios colores.
 
 ![TRUCOS > ARMAS Y VEHICULOS (antes de sumar camuflaje y linterna)](capturas/armas_vehiculos.jpg)
 
@@ -148,7 +163,7 @@ También se puede ajustar con números en **TRUCOS > HUD**, que tiene una pantal
 ### HUD moderno (opcional)
 En **TRUCOS > HUD: ESTILO > HUD MODERNO: ON** el HUD cambia a un estilo como el de los Halo recientes:
 
-- **Escudo**: una barra larga arriba en el centro, de una sola pieza con puntas, en relieve (más clara arriba, más oscura abajo) y con brillo. Se vacía de derecha a izquierda, parpadea cuando está casi vacío y se pone dorado con el sobreescudo.
+- **Escudo**: una barra larga arriba en el centro, de una sola pieza con puntas, en relieve (más clara arriba, más oscura abajo) y con brillo. Se vacía de derecha a izquierda y parpadea cuando está casi vacío. Con el sobrescudo, una capa dorada va encima de la azul: se gasta primero y deja ver el azul debajo (ver [Sobrescudo infinito](#sobrescudo-infinito)).
 - **Vida**: debajo, el "+" en su propia figura y al lado una barra verde agua; se pone roja cuando estás bajo de vida.
 - **Líneas de visor**: salen de los lados, bajan en diagonal y pasan por debajo del escudo.
 - **Radar**: en un panel de ocho lados con anillos, cruz, marcas y la flecha del jugador. Solo se ve con **RADAR REDONDO: OFF**; con el radar redondo encendido (como viene), se usa el redondo también en el HUD moderno.
