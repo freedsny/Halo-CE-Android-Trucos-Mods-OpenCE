@@ -1,6 +1,6 @@
 --- a/source/game/cheats.c
 +++ b/source/game/cheats.c
-@@ -54,11 +54,13 @@
+@@ -54,19 +54,25 @@
  #include "cache/cache_files.h"
  #include "camera/director.h"
  #include "camera/observer.h"
@@ -12,9 +12,11 @@
  #include "interface/terminal.h"
 +#include "items/equipment_definitions.h"
  #include "items/weapon_definitions.h"
++#include "game/game_engine.h" /* port: (FORZAR PUNTO DE CONTROL) */
++#include "main/main.h" /* port: (FORZAR PUNTO DE CONTROL) */
  #include "main/console.h"
  #include "math/real_math.h"
-@@ -66,7 +68,9 @@
+ #include "objects/objects.h"
  #include "rasterizer/rasterizer_console_vars.h"
  #include "scenario/scenario.h"
  #include "tag_files/tag_groups.h"
@@ -24,7 +26,7 @@
  
  /* ---------- constants */
  
-@@ -195,10 +199,499 @@
+@@ -195,10 +201,548 @@
  	return;
  }
  
@@ -372,8 +374,26 @@
 +	boolean done;
 +};
 +
++/* port: FORZAR PUNTO DE CONTROL (TRUCOS): a checkpoint at once, wherever the
++player is (as game_save_totally_unsafe, main_save_map_nonsafe), in the campaign
++and with the player alive; the game shows its "Checkpoint... done" (hud_autosave) */
++static void cheat_port_checkpoint(
++	void)
++{
++	long player_index = cheat_player_index();
++
++	if (game_engine_running())
++		terminal_printf(global_real_argb_orange, "Punto de control: solo en la campana");
++	else if (player_index==NONE || player_get(player_index)->unit_index==NONE)
++		terminal_printf(global_real_argb_orange, "Punto de control: no, estas muerto");
++	else
++		main_save_map_nonsafe();
++	return;
++}
++
 +static struct cheat_action_setting cheat_action_settings[] =
 +{
++	{ "cheats.checkpoint", cheat_port_checkpoint, FALSE },
 +	{ "cheats.all_weapons", cheat_all_weapons, FALSE },
 +	{ "cheats.all_vehicles", cheat_port_all_vehicles, FALSE },
 +	{ "cheats.all_powerups", cheat_port_all_powerups, FALSE },
@@ -391,6 +411,10 @@
 +static boolean cheat_port_overshield = FALSE;
 +static boolean cheat_port_camouflage_on = FALSE;
 +static boolean cheat_port_wide_flashlight = FALSE;
++static boolean cheat_port_no_fall_damage = FALSE;
++static boolean cheat_port_no_fall_damage_on = FALSE;
++static boolean cheat_port_easy_rider = FALSE;
++static boolean cheat_port_easy_rider_on = FALSE;
 +
 +static void cheat_port_unit_settings(
 +	boolean own_game)
@@ -430,6 +454,31 @@
 +			unit->unit.flags &= ~(FLAG(_unit_active_camouflaged_bit) | FLAG(_unit_super_camouflaged_bit));
 +		cheat_port_camouflage_on = FALSE;
 +	}
++	/* SIN DANO POR CAIDA: the unit's own no-falling-damage flag kept on
++	(bipeds.c), without the jetpack's flying; off, cleared once */
++	if (unit && own_game && cheat_port_no_fall_damage)
++	{
++		SET_FLAG(unit->unit.flags, _unit_no_falling_damage_bit, TRUE);
++		cheat_port_no_fall_damage_on = TRUE;
++	}
++	else if (cheat_port_no_fall_damage_on)
++	{
++		if (unit)
++			SET_FLAG(unit->unit.flags, _unit_no_falling_damage_bit, FALSE);
++		cheat_port_no_fall_damage_on = FALSE;
++	}
++	/* NO CAER DEL VEHICULO: Easy Rider, the riders of a vehicle on its back
++	not thrown out (rider_ejection, bipeds.c) */
++	if (own_game && cheat_port_easy_rider)
++	{
++		rider_ejection = FALSE;
++		cheat_port_easy_rider_on = TRUE;
++	}
++	else if (cheat_port_easy_rider_on)
++	{
++		rider_ejection = TRUE;
++		cheat_port_easy_rider_on = FALSE;
++	}
 +	light_port_flashlight_set(cheat_port_wide_flashlight);
 +	hud_port_guide_teleport_update();
 +}
@@ -461,6 +510,8 @@
 +		cheat_port_camouflage = config_boolean("cheats.active_camouflage")!=0;
 +		cheat_port_overshield = config_boolean("cheats.overshield")!=0;
 +		cheat_port_wide_flashlight = config_boolean("cheats.wide_flashlight")!=0;
++		cheat_port_no_fall_damage = config_boolean("cheats.no_fall_damage")!=0;
++		cheat_port_easy_rider = config_boolean("cheats.easy_rider")!=0;
 +		for (index = 0; index<(short)NUMBER_OF_CHEAT_SETTINGS; index++)
 +		{
 +			struct cheat_setting *setting = cheat_settings + index;
@@ -524,7 +575,7 @@
  	if (cheat.controller_enabled)
  	{
  		short local_player_index;
-@@ -310,6 +803,7 @@
+@@ -310,6 +854,7 @@
  	void)
  {
  	cheats_load();
@@ -534,7 +585,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -553,6 +553,178 @@
+@@ -553,6 +553,188 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -594,6 +645,16 @@
 +		"true: done once at the next tick of a game that is not on a network (pause\n"
 +		"menu, SETTINGS, TRUCOS), then put back to false: it works as a button.\n"
 +		"Not in another host's game: its rules." },
++	{ "cheats.no_fall_damage", _config_boolean, "false", "HALO_CHEATS_NO_FALL_DAMAGE", _environment_value, _platform_all,
++		"No falling damage (TRUCOS, MAS TRUCOS): the player's falls do not hurt, without\n"
++		"the jetpack's flying. In a game that is not on a network." },
++	{ "cheats.easy_rider", _config_boolean, "false", "HALO_CHEATS_EASY_RIDER", _environment_value, _platform_all,
++		"Easy Rider (TRUCOS, MAS TRUCOS): a vehicle on its back does not throw its riders\n"
++		"out (rider_ejection false). In a game that is not on a network." },
++	{ "cheats.checkpoint", _config_boolean, "false", "HALO_CHEATS_CHECKPOINT", _environment_value, _platform_all,
++		"Force a checkpoint (TRUCOS, MAS TRUCOS): saves the campaign where the player is, at once\n"
++		"(as game_save_totally_unsafe). true: done once at the next tick of a game\n"
++		"that is not on a network; the game puts it back to false." },
 +	{ "cheats.all_powerups", _config_boolean, "false", "HALO_CHEATS_ALL_POWERUPS", _environment_value, _platform_all,
 +		"All powerups: drops every powerup near the player.\n"
 +		"true: done once at the next tick of a game that is not on a network (pause\n"
@@ -736,7 +797,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -502,6 +502,192 @@
+@@ -502,6 +502,206 @@
      ],
  }
  
@@ -772,13 +833,16 @@
 +
 +SCREENS["network_setup/cheats"] = {
 +    "screen": "cheats_settings_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"),
-+    # (ten rows: a 27px step, as Graphics', keeps the last one clear of the help)
-+    "spacing": 27, "rows": [],
++    # (eleven rows: a 25px step, as the server settings' 24, and the help lower,
++    # as Video Setup's, keep the last one clear of the help)
++    "spacing": 25, "help_top": 356, "help_height": 54, "rows": [],
 +    "categories": [
 +        ("TRUCOS:", "network_setup/cheats_toggles",
 +         "Municion infinita, modo dios, super salto y mas.\\nSolo en partidas que no son en red."),
 +        ("ARMAS, LINTERNA Y MAS:", "network_setup/cheats_items",
 +         "Armas, vehiculos y powerups cerca de ti, camuflaje,\\nla linterna y el teletransporte."),
++        ("MAS TRUCOS:", "network_setup/cheats_mas",
++         "Forzar punto de control, sin dano por caida\\ny no caer del vehiculo."),
 +        ("HUD: ESTILO:", "network_setup/cheats_hud_estilo",
 +         "El HUD original o el moderno: escudo y vida\\nen barras largas arriba en el centro."),
 +        ("HUD: RADAR:", "network_setup/cheats_hud_radar",
@@ -818,6 +882,17 @@
 +         "Al chocar con un enemigo o un vehiculo\\nlo controlas.", None),
 +        ("SENTIR EL DANO DE OTROS:", "cheats.reflexive_damage_effects", ON_OFF,
 +         "Cuando otros reciben dano, tu pantalla reacciona\\n(sacudida, destellos) como si te golpearan a ti.", None),
++    ],
++}
++SCREENS["network_setup/cheats_mas"] = {
++    "screen": "cheats_mas_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"), "spacing": 30,
++    "rows": [
++        ("FORZAR PUNTO DE CONTROL:", "cheats.checkpoint", ON_OFF,
++         "Ponlo en ON y vuelve al juego: guarda la partida\\nahi mismo. No lo uses cayendo o a punto de morir.", None),
++        ("SIN DANO POR CAIDA:", "cheats.no_fall_damage", ON_OFF,
++         "Las caidas no te hacen dano, sin volar\\n(el JETPACK tambien lo hace, y ademas vuela).", None),
++        ("NO CAER DEL VEHICULO:", "cheats.easy_rider", ON_OFF,
++         "Si el vehiculo se voltea, sigues adentro\\nen vez de salir disparado.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_items"] = {
