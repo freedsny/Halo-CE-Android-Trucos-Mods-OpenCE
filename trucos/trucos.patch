@@ -813,7 +813,7 @@
 +        ("MEDUSA:", "cheats.medusa", ON_OFF,
 +         "Los enemigos que te miran mueren.", None),
 +        ("JETPACK:", "cheats.jetpack", ON_OFF,
-+         "Puedes volar. Puede dejar la mision trabada:\\nguarda antes de usarlo.", None),
++         "Manten DISPARAR y GRANADA a la vez: vuelas a\\ndonde miras. Sin dano por caida. Guarda antes.", None),
 +        ("POSEER AL CHOCAR:", "cheats.bump_possession", ON_OFF,
 +         "Al chocar con un enemigo o un vehiculo\\nlo controlas.", None),
 +        ("SENTIR EL DANO DE OTROS:", "cheats.reflexive_damage_effects", ON_OFF,

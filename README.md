@@ -44,7 +44,7 @@ Se abre en **AJUSTES > tu perfil > TRUCOS**, y en partida en **pausa > AJUSTES >
 | Modo dios | No mueres por disparos ni caídas (sirve junto con el súper salto y el jetpack) |
 | Matar de un golpe | Tus disparos matan al instante |
 | Medusa | Los enemigos que te miran mueren |
-| Jetpack | Puedes volar. Puede dejar la misión trabada si llegas a donde no deberías: **guarda antes de usarlo** |
+| Jetpack | Puedes volar: con el truco en ON, **mantén disparar y granada a la vez** (en la pantalla, los dos botones con dos dedos) y vuelas hacia donde miras; suéltalos para bajar. Tampoco te hacen daño las caídas. Puede dejar la misión trabada si llegas a donde no deberías: **guarda antes de usarlo** |
 | Poseer al chocar | Al chocar con un enemigo o vehículo lo controlas |
 | Sentir el daño de otros | Cuando otros reciben daño, tu pantalla reacciona (sacudida, destellos) como si te golpearan a ti |
 
