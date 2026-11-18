@@ -662,7 +662,7 @@
 +	{ "cheats.loadout_primary", _config_string, "\"assault_rifle\"", "HALO_CHEATS_LOADOUT_PRIMARY", _environment_value, _platform_all,
 +		"cheats.loadout \"set\"'s first weapon, one of cheats.one_weapon's: pistol, assault_rifle,\n"
 +		"shotgun, sniper_rifle, rocket_launcher, flamethrower, plasma_pistol, plasma_rifle,\n"
-+		"needler or fuel_rod (not its energy_sword, which the player cannot hold)." },
++		"needler, fuel_rod or energy_sword (which the player cannot hold)." },
 +	{ "cheats.loadout_secondary", _config_string, "\"pistol\"", "HALO_CHEATS_LOADOUT_SECONDARY", _environment_value, _platform_all,
 +		"cheats.loadout \"set\"'s second weapon: one of the first's, or none." },
 +	{ "cheats.third_person", _config_boolean, "false", "HALO_CHEATS_THIRD_PERSON", _environment_value, _platform_all,
@@ -835,7 +835,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -560,6 +560,241 @@
+@@ -560,6 +560,242 @@
      ],
  }
  
@@ -948,12 +948,13 @@
 +# (trucos) ARMAS AL EMPEZAR: opened after a campaign level's difficulty
 +# (menu_functions.c's trucos_armas_screen_open), with ESCOGER ARMAS AL EMPEZAR
 +# on; its OK starts the level (_armas_inicio_screen)
-+# (UN ARMA's but the energy sword, the player cannot hold: trucos_armas.c's
-+# trucos_armas_loadout_choices)
++# (UN ARMA's, all of them, the energy sword too though the player cannot
++# hold it: trucos_armas.c's trucos_armas_loadout_choices)
 +LOADOUT_WEAPONS = [("PISTOLA", "pistol"), ("RIFLE DE ASALTO", "assault_rifle"), ("ESCOPETA", "shotgun"),
 +                   ("FRANCOTIRADOR", "sniper_rifle"), ("LANZACOHETES", "rocket_launcher"),
 +                   ("LANZALLAMAS", "flamethrower"), ("PISTOLA PLASMA", "plasma_pistol"),
-+                   ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler"), ("CANON COMBUSTIBLE", "fuel_rod")]
++                   ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler"), ("CANON COMBUSTIBLE", "fuel_rod"),
++                   ("ESPADA DE ENERGIA", "energy_sword")]
 +SCREENS["network_setup/cheats_armas_inicio"] = {
 +    "screen": "armas_inicio_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"), "spacing": 30,
 +    "rows": [
@@ -1077,7 +1078,7 @@
  # Network Setup in a game (the pause menu's SETTINGS: port/linux/game/
  # menu_tags.c's pause_network_patch): its pages alone, without the rows that
  # would drop the game (internet play) or are for the main menu (the router,
-@@ -579,6 +814,8 @@
+@@ -579,6 +815,8 @@
  # the settings whose rows have the wider spinner (a device's name)
  WIDE_SETTINGS = {"audio.output_device", "audio.input_device", "streamer.slurs", "streamer.swearing",
                   "streamer.insults", "network.listings", "network.browser_maps", "network.browser_sort"}
@@ -1086,7 +1087,7 @@
  
  # Teamplay Options' rows of the port's (_teamplay_options_extras): the
  # gametype's FORCE TEAM SPAWNS, then the host's voice chat and vote kicks;
-@@ -928,6 +1165,23 @@
+@@ -928,6 +1166,23 @@
  
  
  
@@ -1110,7 +1111,7 @@
  def settings_files() -> dict:
      """the files of the port's screens, by their names in ce/"""
      files = {}
-@@ -935,6 +1189,7 @@
+@@ -935,6 +1190,7 @@
          files[f"{PE}/{folder}".replace("/", ".") + ".xml"] = (
              _mcc_downloads() if folder == "network_setup/mcc_downloads" else
              _controller_screen() if folder == "controller_remapping" else
@@ -11500,7 +11501,7 @@
 +#endif
 --- /dev/null
 +++ b/port/linux/game/trucos_armas.c
-@@ -0,0 +1,621 @@
+@@ -0,0 +1,622 @@
 +/*
 +TRUCOS_ARMAS.C
 +
@@ -11646,7 +11647,7 @@
 +
 +/* ARMAS AL EMPEZAR's choices (tools/port_settings.py's cheats_armas_inicio):
 +their settings' values and their weapons' folders, those of UN ARMA
-+(cheats.c's cheat_port_weapons) but its energy sword: a weapon is the first 'weap'
++(cheats.c's cheat_port_weapons), all of them: a weapon is the first 'weap'
 +whose name has one of its folders, the first folder first */
 +static struct
 +{
@@ -11665,8 +11666,9 @@
 +	{ "plasma_rifle", { "weapons\\plasma rifle\\", NULL }, "RIFLE PLASMA" },
 +	{ "needler", { "weapons\\needler\\", NULL }, "NEEDLER" },
 +	{ "fuel_rod", { "weapons\\fuel rod gun\\", "weapons\\plasma_cannon\\" }, "CANON COMBUSTIBLE" },
-+	/* (not the energy sword, UN ARMA's too: the Elites', which the player
-+	cannot hold, and loses at once) */
++	/* (the Elites': the player cannot hold it, and has another weapon in its
++	place, but its player wants it in the list) */
++	{ "energy_sword", { "weapons\\energy sword\\", NULL }, "ESPADA DE ENERGIA" },
 +};
 +
 +#define TRUCOS_ARMAS_LOADOUT_CHOICES ((int)(sizeof(trucos_armas_loadout_choices) / sizeof(trucos_armas_loadout_choices[0])))
