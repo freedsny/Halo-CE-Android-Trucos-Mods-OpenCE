@@ -11500,7 +11500,7 @@
 +#endif
 --- /dev/null
 +++ b/port/linux/game/trucos_armas.c
-@@ -0,0 +1,478 @@
+@@ -0,0 +1,557 @@
 +/*
 +TRUCOS_ARMAS.C
 +
@@ -11544,6 +11544,7 @@
 +#include "networking/network_game_globals.h"
 +#include "objects/objects.h"
 +#include "units/units.h"
++#include "interface/terminal.h"
 +
 +extern int config_boolean(char const *name);
 +extern char const *config_string(char const *name);
@@ -11635,19 +11636,20 @@
 +{
 +	char const *value;
 +	char const *folders[2];
++	char const *shown;
 +} const trucos_armas_loadout_choices[] =
 +{
-+	{ "pistol", { "weapons\\pistol\\", NULL } },
-+	{ "assault_rifle", { "weapons\\assault rifle\\", NULL } },
-+	{ "shotgun", { "weapons\\shotgun\\", NULL } },
-+	{ "sniper_rifle", { "weapons\\sniper rifle\\", NULL } },
-+	{ "rocket_launcher", { "weapons\\rocket launcher\\", NULL } },
-+	{ "flamethrower", { "weapons\\flamethrower\\", NULL } },
-+	{ "plasma_pistol", { "weapons\\plasma pistol\\", NULL } },
-+	{ "plasma_rifle", { "weapons\\plasma rifle\\", NULL } },
-+	{ "needler", { "weapons\\needler\\", NULL } },
-+	{ "fuel_rod", { "weapons\\fuel rod gun\\", "weapons\\plasma_cannon\\" } },
-+	{ "energy_sword", { "weapons\\energy sword\\", NULL } },
++	{ "pistol", { "weapons\\pistol\\", NULL }, "PISTOLA" },
++	{ "assault_rifle", { "weapons\\assault rifle\\", NULL }, "RIFLE DE ASALTO" },
++	{ "shotgun", { "weapons\\shotgun\\", NULL }, "ESCOPETA" },
++	{ "sniper_rifle", { "weapons\\sniper rifle\\", NULL }, "FRANCOTIRADOR" },
++	{ "rocket_launcher", { "weapons\\rocket launcher\\", NULL }, "LANZACOHETES" },
++	{ "flamethrower", { "weapons\\flamethrower\\", NULL }, "LANZALLAMAS" },
++	{ "plasma_pistol", { "weapons\\plasma pistol\\", NULL }, "PISTOLA PLASMA" },
++	{ "plasma_rifle", { "weapons\\plasma rifle\\", NULL }, "RIFLE PLASMA" },
++	{ "needler", { "weapons\\needler\\", NULL }, "NEEDLER" },
++	{ "fuel_rod", { "weapons\\fuel rod gun\\", "weapons\\plasma_cannon\\" }, "CANON COMBUSTIBLE" },
++	{ "energy_sword", { "weapons\\energy sword\\", NULL }, "ESPADA DE ENERGIA" },
 +};
 +
 +#define TRUCOS_ARMAS_LOADOUT_CHOICES ((int)(sizeof(trucos_armas_loadout_choices) / sizeof(trucos_armas_loadout_choices[0])))
@@ -11659,6 +11661,14 @@
 +	int choices[2];
 +	long weapons[2];
 +	int ready;
++	/* what the player is told as the level starts (trucos_armas_loadout_tell):
++	the level was one of ARMAS AL EMPEZAR's, its weapons' pack was not
++	written yet, and whether it has been told */
++	int asked;
++	int pack_missing;
++	int told;
++	/* (ESCOGER ARMAS AL EMPEZAR on, LAS DE LA MISION chosen) */
++	int mission;
 +} trucos_armas_loadout;
 +
 +/* a tag's name has the folder (as cheats.c's cheat_port_name_has) */
@@ -11827,6 +11837,51 @@
 +	return !tag_pack_busy();
 +}
 +
++/* the first time the player is given its weapons in a level of ARMAS AL
++EMPEZAR's: on the screen, the weapons it starts with, or why it has not got
++them */
++static void trucos_armas_loadout_tell(long given)
++{
++	char text[160];
++	int slot;
++
++	if (trucos_armas_loadout.told || (!trucos_armas_loadout.asked && !trucos_armas_loadout.mission))
++		return;
++	trucos_armas_loadout.told = 1;
++	if (trucos_armas_loadout.mission)
++	{
++		terminal_printf(global_real_argb_orange, "ARMAS AL EMPEZAR: las de la mision");
++		return;
++	}
++	if (given > 0)
++	{
++		text[0] = 0;
++		for (slot = 0; slot < 2; slot++)
++		{
++			if (trucos_armas_loadout.weapons[slot] == NONE)
++				continue;
++			if (text[0])
++				strncat(text, " Y ", sizeof(text) - strlen(text) - 1);
++			strncat(text, trucos_armas_loadout_choices[trucos_armas_loadout.choices[slot]].shown,
++				sizeof(text) - strlen(text) - 1);
++		}
++		terminal_printf(global_real_argb_orange, "ARMAS AL EMPEZAR: %s", text);
++	}
++	for (slot = 0; slot < 2; slot++)
++	{
++		int choice = trucos_armas_loadout.choices[slot];
++
++		if (choice == NONE || trucos_armas_loadout.weapons[slot] != NONE)
++			continue;
++		terminal_printf(global_real_argb_orange, trucos_armas_loadout.pack_missing ?
++			"ARMAS AL EMPEZAR: esta mision no trae %s. Faltan las armas de otras misiones: sal al menu principal, espera que las saque y empieza otra vez" :
++			"ARMAS AL EMPEZAR: no se encontro %s en ningun mapa", trucos_armas_loadout_choices[choice].shown);
++	}
++	if (given == 0 && trucos_armas_loadout.ready)
++		terminal_printf(global_real_argb_orange, "ARMAS AL EMPEZAR: no se pudieron dar las armas");
++	return;
++}
++
 +/* players.c's player_add_equipment: the level's two weapons given in the
 +starting profile's weapons' place (1: given, or the player keeps what it has
 +when a script's weapons are added to them) */
@@ -11835,9 +11890,15 @@
 +	struct unit_datum *unit;
 +	int first = 1;
 +	int index;
++	long given = 0;
 +
-+	if (!trucos_armas_loadout.ready || game_engine_running() || network_game_distributed_client())
++	if (game_engine_running() || network_game_distributed_client())
 +		return 0;
++	if (!trucos_armas_loadout.ready)
++	{
++		trucos_armas_loadout_tell(-1);
++		return 0;
++	}
 +	unit = unit_try_and_get(unit_index);
 +	if (!unit || unit->unit.player_index == NONE)
 +		return 0;
@@ -11855,11 +11916,19 @@
 +		if (weapon_index == NONE)
 +			continue;
 +		if (unit_add_weapon_to_inventory(unit_index, weapon_index, first ? _unit_add_weapon_starting : _unit_add_weapon_normal))
++		{
 +			first = 0;
++			given++;
++		}
 +		else
++		{
++			platform_log("trucos: ARMAS AL EMPEZAR: %s could not be given", tag_get_name(trucos_armas_loadout.weapons[index]));
 +			object_delete(weapon_index);
++		}
 +	}
-+	return 1;
++	trucos_armas_loadout_tell(given);
++	/* (none given: the profile's, as without ARMAS AL EMPEZAR) */
++	return given > 0;
 +}
 +
 +/* cache_files.c, as a level's tags have loaded: before the menus' and the
@@ -11874,10 +11943,19 @@
 +	int all, slot;
 +
 +	trucos_armas_loadout.ready = 0;
++	trucos_armas_loadout.asked = 0;
++	trucos_armas_loadout.pack_missing = 0;
++	trucos_armas_loadout.told = 0;
++	trucos_armas_loadout.mission = 0;
 +	if (!scenario_name || !trucos_armas_campaign_map(scenario_name))
 +		return;
 +	all = config_boolean("cheats.import_weapons");
 +	trucos_armas_loadout_choose();
++	trucos_armas_loadout.asked = trucos_armas_loadout_chosen();
++	trucos_armas_loadout.mission = !trucos_armas_loadout.asked && config_boolean("cheats.loadout_ask");
++	platform_log("trucos: ARMAS AL EMPEZAR: %s, ask %d, mode %s, %s and %s", scenario_name,
++		config_boolean("cheats.loadout_ask"), config_string("cheats.loadout"), config_string("cheats.loadout_primary"),
++		config_string("cheats.loadout_secondary"));
 +	if (!all && trucos_armas_loadout.choices[0] == NONE && trucos_armas_loadout.choices[1] == NONE)
 +		return;
 +	for (weapon = 0; weapon < TRUCOS_ARMAS_WEAPON_COUNT; weapon++)
@@ -11902,6 +11980,7 @@
 +		/* (written at the main menu, now that it is wanted) */
 +		tag_pack_request(TRUCOS_ARMAS_PACK);
 +		platform_log("trucos: TRAER ARMAS: the pack is not written yet; %s loads without them", scenario_name);
++		trucos_armas_loadout.pack_missing = 1;
 +		trucos_armas_loadout_resolve(scenario_name);
 +		return;
 +	}
