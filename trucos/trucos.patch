@@ -662,7 +662,7 @@
 +	{ "cheats.loadout_primary", _config_string, "\"assault_rifle\"", "HALO_CHEATS_LOADOUT_PRIMARY", _environment_value, _platform_all,
 +		"cheats.loadout \"set\"'s first weapon, one of cheats.one_weapon's: pistol, assault_rifle,\n"
 +		"shotgun, sniper_rifle, rocket_launcher, flamethrower, plasma_pistol, plasma_rifle,\n"
-+		"needler, fuel_rod or energy_sword." },
++		"needler or fuel_rod (not its energy_sword, which the player cannot hold)." },
 +	{ "cheats.loadout_secondary", _config_string, "\"pistol\"", "HALO_CHEATS_LOADOUT_SECONDARY", _environment_value, _platform_all,
 +		"cheats.loadout \"set\"'s second weapon: one of the first's, or none." },
 +	{ "cheats.third_person", _config_boolean, "false", "HALO_CHEATS_THIRD_PERSON", _environment_value, _platform_all,
@@ -948,12 +948,12 @@
 +# (trucos) ARMAS AL EMPEZAR: opened after a campaign level's difficulty
 +# (menu_functions.c's trucos_armas_screen_open), with ESCOGER ARMAS AL EMPEZAR
 +# on; its OK starts the level (_armas_inicio_screen)
-+# (UN ARMA's, all of them: trucos_armas.c's trucos_armas_loadout_choices)
++# (UN ARMA's but the energy sword, the player cannot hold: trucos_armas.c's
++# trucos_armas_loadout_choices)
 +LOADOUT_WEAPONS = [("PISTOLA", "pistol"), ("RIFLE DE ASALTO", "assault_rifle"), ("ESCOPETA", "shotgun"),
 +                   ("FRANCOTIRADOR", "sniper_rifle"), ("LANZACOHETES", "rocket_launcher"),
 +                   ("LANZALLAMAS", "flamethrower"), ("PISTOLA PLASMA", "plasma_pistol"),
-+                   ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler"), ("CANON COMBUSTIBLE", "fuel_rod"),
-+                   ("ESPADA DE ENERGIA", "energy_sword")]
++                   ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler"), ("CANON COMBUSTIBLE", "fuel_rod")]
 +SCREENS["network_setup/cheats_armas_inicio"] = {
 +    "screen": "armas_inicio_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"), "spacing": 30,
 +    "rows": [
@@ -11500,7 +11500,7 @@
 +#endif
 --- /dev/null
 +++ b/port/linux/game/trucos_armas.c
-@@ -0,0 +1,557 @@
+@@ -0,0 +1,621 @@
 +/*
 +TRUCOS_ARMAS.C
 +
@@ -11546,6 +11546,19 @@
 +#include "units/units.h"
 +#include "interface/terminal.h"
 +
++extern void *cache_files_tag_instances(long *count);
++
++/* the loaded map's tag, as cache_files.c has it (tag_import.c and
++menu_tags.c define it the same way) */
++struct cache_file_tag_instance
++{
++	long group_tag;
++	long parent_group_tags[2];
++	long tag_index;
++	char *name;
++	void *base_address;
++	unsigned long unused[2];
++};
 +extern int config_boolean(char const *name);
 +extern char const *config_string(char const *name);
 +extern void platform_log(char const *format, ...);
@@ -11627,10 +11640,13 @@
 +#define TRUCOS_ARMAS_MAP_COUNT (sizeof(trucos_armas_maps) / sizeof(trucos_armas_maps[0]))
 +
 +static int trucos_armas_imported;
++/* the tags copied into the level, as a saved game's key
++(trucos_armas_saved_game_key): 0 with none */
++static unsigned long trucos_armas_key;
 +
 +/* ARMAS AL EMPEZAR's choices (tools/port_settings.py's cheats_armas_inicio):
 +their settings' values and their weapons' folders, those of UN ARMA
-+(cheats.c's cheat_port_weapons), all of them: a weapon is the first 'weap'
++(cheats.c's cheat_port_weapons) but its energy sword: a weapon is the first 'weap'
 +whose name has one of its folders, the first folder first */
 +static struct
 +{
@@ -11649,7 +11665,8 @@
 +	{ "plasma_rifle", { "weapons\\plasma rifle\\", NULL }, "RIFLE PLASMA" },
 +	{ "needler", { "weapons\\needler\\", NULL }, "NEEDLER" },
 +	{ "fuel_rod", { "weapons\\fuel rod gun\\", "weapons\\plasma_cannon\\" }, "CANON COMBUSTIBLE" },
-+	{ "energy_sword", { "weapons\\energy sword\\", NULL }, "ESPADA DE ENERGIA" },
++	/* (not the energy sword, UN ARMA's too: the Elites', which the player
++	cannot hold, and loses at once) */
 +};
 +
 +#define TRUCOS_ARMAS_LOADOUT_CHOICES ((int)(sizeof(trucos_armas_loadout_choices) / sizeof(trucos_armas_loadout_choices[0])))
@@ -11931,6 +11948,38 @@
 +	return given > 0;
 +}
 +
++/* game_state.c: the tags copied into the level, which its saved game's map
++checksum is mixed with. A saved game of the level with other tags copied
++(TRAER ARMAS or ESCOGER ARMAS AL EMPEZAR on in one game and not in the other)
++has other tag indices in it, and is not taken, as one of another map */
++unsigned long trucos_armas_saved_game_key(void)
++{
++	return trucos_armas_key;
++}
++
++/* the names of the tags from first on (those copied), and how many */
++static unsigned long trucos_armas_tags_key(long first)
++{
++	struct cache_file_tag_instance *instances;
++	unsigned long key = 2166136261UL;
++	long count = 0;
++	long index;
++
++	instances = cache_files_tag_instances(&count);
++	if (!instances || count <= first)
++		return 0;
++	for (index = first; index < count; index++)
++	{
++		char const *name = instances[index].name;
++
++		key = (key ^ (unsigned long)instances[index].group_tag) * 16777619UL;
++		for (; name && *name; name++)
++			key = (key ^ (unsigned char)*name) * 16777619UL;
++	}
++	key = (key ^ (unsigned long)(count - first)) * 16777619UL;
++	return key ? key : 1;
++}
++
 +/* cache_files.c, as a level's tags have loaded: before the menus' and the
 +mods' tags, which go after these. The weapons the level has not got: every
 +campaign weapon with TRAER ARMAS, ARMAS AL EMPEZAR's two with that */
@@ -11939,7 +11988,7 @@
 +	char wanted[TRUCOS_ARMAS_WEAPON_COUNT];
 +	int needed[2];
 +	unsigned long weapon, map;
-+	long left = 0, asked = 0;
++	long left = 0, asked = 0, before = 0;
 +	int all, slot;
 +
 +	trucos_armas_loadout.ready = 0;
@@ -11947,9 +11996,14 @@
 +	trucos_armas_loadout.pack_missing = 0;
 +	trucos_armas_loadout.told = 0;
 +	trucos_armas_loadout.mission = 0;
++	trucos_armas_key = 0;
 +	if (!scenario_name || !trucos_armas_campaign_map(scenario_name))
 +		return;
-+	all = config_boolean("cheats.import_weapons");
++	/* every campaign weapon the level has not got, with TRAER ARMAS or ESCOGER
++	ARMAS AL EMPEZAR (whichever weapons are chosen, LAS DE LA MISION too): the
++	same tags each time the level loads, so that its saved game is the
++	level's again (trucos_armas_saved_game_key) */
++	all = config_boolean("cheats.import_weapons") || config_boolean("cheats.loadout_ask");
 +	trucos_armas_loadout_choose();
 +	trucos_armas_loadout.asked = trucos_armas_loadout_chosen();
 +	trucos_armas_loadout.mission = !trucos_armas_loadout.asked && config_boolean("cheats.loadout_ask");
@@ -11963,11 +12017,18 @@
 +		wanted[weapon] = all && tag_loaded('weap', trucos_armas_weapons[weapon]) == NONE;
 +		left += wanted[weapon];
 +	}
-+	/* ARMAS AL EMPEZAR's two the level has not got, whatever their names */
++	/* ARMAS AL EMPEZAR's two the level has not got, by their folders, when
++	not among those copied by their names already */
 +	for (slot = 0; slot < 2; slot++)
 +	{
-+		needed[slot] = trucos_armas_loadout.choices[slot] != NONE &&
-+			trucos_armas_choice_weapon(trucos_armas_loadout.choices[slot]) == NONE;
++		int choice = trucos_armas_loadout.choices[slot];
++
++		needed[slot] = choice != NONE && trucos_armas_choice_weapon(choice) == NONE;
++		for (weapon = 0; needed[slot] && weapon < TRUCOS_ARMAS_WEAPON_COUNT; weapon++)
++		{
++			if (wanted[weapon] && trucos_armas_choice_has(choice, trucos_armas_weapons[weapon]))
++				needed[slot] = 0;
++		}
 +		left += needed[slot];
 +	}
 +	if (!left)
@@ -11984,6 +12045,7 @@
 +		trucos_armas_loadout_resolve(scenario_name);
 +		return;
 +	}
++	cache_files_tag_instances(&before);
 +	if (!tag_import_begin())
 +	{
 +		trucos_armas_loadout_resolve(scenario_name);
@@ -12044,6 +12106,7 @@
 +		trucos_armas_imported = 1;
 +	}
 +	tag_import_end();
++	trucos_armas_key = asked ? trucos_armas_tags_key(before) : 0;
 +	trucos_armas_loadout_resolve(scenario_name);
 +	return;
 +}
@@ -12052,6 +12115,7 @@
 +void trucos_armas_tags_unloaded(void)
 +{
 +	trucos_armas_loadout.ready = 0;
++	trucos_armas_key = 0;
 +	if (!trucos_armas_imported)
 +		return;
 +	tag_import_level_unloaded();
@@ -12382,3 +12446,51 @@
  			{
  				weapon_index = create_weapon(
  					&starting_profile->secondary_weapon,
+--- a/source/saved games/game_state.c	
++++ b/source/saved games/game_state.c	
+@@ -158,6 +158,18 @@
+ 
+ void dummy(
+ 	void);
++/* port (trucos): the map's checksum, mixed with the tags TRAER ARMAS and
++ESCOGER ARMAS AL EMPEZAR copied into the level (port/linux/game/trucos_armas.c):
++a saved game of the level with other tags copied has other tag indices in its
++objects, and is not taken, as one of another map */
++extern unsigned long trucos_armas_saved_game_key(void);
++
++static unsigned long game_state_cache_checksum(
++	void)
++{
++	return cache_files_get_checksum() ^ trucos_armas_saved_game_key();
++}
++
+ static boolean game_state_header_valid(
+ 	struct game_state_header *header,
+ 	boolean halt_on_error);
+@@ -336,7 +348,7 @@
+ 
+ 	game_state_globals.header->player_count = player_spawn_count;
+ 	game_state_globals.header->difficulty = game_difficulty_level_get();
+-	game_state_globals.header->cache_file_checksum = cache_files_get_checksum();
++	game_state_globals.header->cache_file_checksum = game_state_cache_checksum();
+ 	game_state_globals.header->allocation_size_checksum = game_state_globals.allocation_size_checksum;
+ 
+ 	return;
+@@ -533,7 +545,7 @@
+ 				csprintf(temporary, "expected #%d players but got #%d", player_spawn_count, header->player_count));
+ 		}
+ 	}
+-	else if (header->cache_file_checksum != cache_files_get_checksum())
++	else if (header->cache_file_checksum != game_state_cache_checksum())
+ 	{
+ 		if (halt_on_error)
+ 		{
+@@ -555,7 +567,7 @@
+ 			header->map_name, tag_get_name(global_scenario_index),
+ 			(unsigned long)header->allocation_size_checksum, (unsigned long)game_state_globals.allocation_size_checksum,
+ 			header->player_count, player_spawn_count,
+-			(unsigned long)header->cache_file_checksum, (unsigned long)cache_files_get_checksum());
++			(unsigned long)header->cache_file_checksum, (unsigned long)game_state_cache_checksum());
+ 	}
+ 
+ 	return valid;
