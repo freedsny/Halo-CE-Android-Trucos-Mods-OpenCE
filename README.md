@@ -70,6 +70,7 @@ En **TRUCOS > MAS TRUCOS**:
 | Forzar punto de control | Guarda la partida ahí mismo, como un punto de control (sale "Punto de control... hecho"). Funciona como botón: lo pones en ON, vuelves al juego y vuelve solo a OFF. Solo en la campaña y estando vivo. **No lo uses cayendo o a punto de morir**: volverías siempre a ese momento |
 | Sin daño por caída | Las caídas no te hacen daño, sin ponerte a volar como el jetpack. Caer fuera del mapa sí te sigue matando |
 | No caer del vehículo | Si el vehículo se voltea, sigues adentro en vez de salir disparado |
+| Traer armas | **(en prueba)** Cada misión de la campaña carga con las armas de las otras misiones que no tiene (escopeta, francotirador, lanzacohetes, espada…), para que **UN ARMA** y **TODAS LAS ARMAS** puedan darte cualquiera. La primera vez, en el menú principal, el juego saca las armas de tus mapas a `tag_pack/trucos_armas.pack` (tarda unos minutos, una sola vez). Se aplica al **empezar o reiniciar** la misión, no al volver al punto de control. Usa el copiador de [Halo Content Evolved](https://github.com/Watanoge/halo-content-evolved) |
 | Tercera persona | A pie, la cámara va detrás de ti, por encima del hombro. **Hombro**: derecho, izquierdo o centro (desde arriba de la cabeza). **Distancia**: cerca, normal o lejos. La mira sigue en el centro de la pantalla y los disparos van a donde apuntas; si hay una pared detrás, la cámara se acerca sola. La cámara gira en cada cuadro, al mismo tiempo que mueves el dedo, para que se sienta fluida. Con la mira de un arma (zoom) vuelve a primera persona, y en los vehículos y las escenas de video es como siempre. Viene de [Halo Content Evolved](https://github.com/Watanoge/halo-content-evolved) |
 
 Armas, vehículos y powerups funcionan como **botones**: las pones en ON (o eliges el arma o el vehículo), vuelves al juego, se ejecutan una vez y vuelven solas a OFF (o a NINGUNA). Solo aparecen las armas, vehículos y powerups que el mapa actual tiene cargados: cada misión trae solo los suyos, así que no se puede sacar un Scorpion en una misión que no lo tiene (sale un aviso "no está en este mapa").
@@ -99,7 +100,7 @@ Todo está dentro de **TRUCOS** (pausa > AJUSTES > TRUCOS):
 |---|---|
 | **TRUCOS** | Munición infinita, sin recargar, súper salto, modo dios, matar de un golpe, medusa, jetpack, poseer al chocar, sentir el daño de otros |
 | **ARMAS, LINTERNA Y MAS** | Todas las armas, todos los vehículos, un arma, un vehículo, todos los powerups, sobrescudo infinito, camuflaje, luz infinita, linterna amplia, teletransporte |
-| **MAS TRUCOS** | Forzar punto de control, sin daño por caída, no caer del vehículo, tercera persona (hombro y distancia) |
+| **MAS TRUCOS** | Forzar punto de control, sin daño por caída, no caer del vehículo, traer armas de otras misiones, tercera persona (hombro y distancia) |
 | **HUD: ESTILO** | HUD moderno ON/OFF |
 | **HUD: RADAR** | Radar redondo, tamaño del radar, barrido, y moverlo (horizontal y vertical, grueso y fino) |
 | **HUD: ESCUDO / VIDA / MUNICION / GRANADAS** | Mover cada parte (horizontal y vertical, grueso y fino) |
