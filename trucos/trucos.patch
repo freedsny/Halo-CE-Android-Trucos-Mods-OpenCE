@@ -6092,15 +6092,17 @@
  			{
 --- a/port/linux/game/render_interpolation.c
 +++ b/port/linux/game/render_interpolation.c
-@@ -44,6 +44,7 @@
- #include "game/players.h"
- #include "render/render_cameras.h"
- #include "units/units.h"
-+#include "third_person.h" /* port (trucos): the view over the shoulder (TRUCOS, TERCERA PERSONA) */
+@@ -691,6 +691,9 @@
+ /* ---------- camera */
  
- /* port/linux/src/port_config.c */
- int config_boolean(const char *name);
-@@ -707,6 +708,13 @@
+ static struct observer_result direct_cameras[MAXIMUM_LOCAL_PLAYERS];
++/* port (trucos): third_person.c's, the view over the shoulder (TRUCOS, TERCERA PERSONA) */
++boolean third_person_direct(short local_player_index, struct observer_result const *camera,
++	struct observer_result *result);
+ 
+ static struct observer_result const *render_interpolation_blended_camera(
+ 	short local_player_index,
+@@ -707,6 +710,13 @@
  	short local_player_index,
  	struct observer_result const *observer)
  {
