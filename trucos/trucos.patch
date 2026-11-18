@@ -5570,7 +5570,7 @@
 +}
 --- /dev/null
 +++ b/port/linux/game/third_person.c
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,277 @@
 +/*
 +THIRD_PERSON.C
 +
@@ -5783,6 +5783,51 @@
 +	}
 +}
 +
++/* (a vector turned by the turn taking from to to: Rodrigues's rotation) */
++static void third_person_turn(real_vector3d const *axis, real cosine, real sine, real_vector3d const *vector,
++	real_vector3d *result)
++{
++	real_vector3d across;
++	real along = dot_product3d(axis, vector) * (1.f - cosine);
++
++	cross_product3d(axis, vector, &across);
++	result->i = vector->i * cosine + across.i * sine + axis->i * along;
++	result->j = vector->j * cosine + across.j * sine + axis->j * along;
++	result->k = vector->k * cosine + across.k * sine + axis->k * along;
++}
++
++boolean third_person_direct(short local_player_index, struct observer_result const *camera,
++	struct observer_result *result)
++{
++	real_vector3d now;
++	real_vector3d axis;
++	real_vector3d offset;
++	real_vector3d turned;
++	real cosine, sine;
++
++	if (!camera || !third_person_viewing(local_player_index) || director_inhibited_facing(local_player_index))
++		return FALSE;
++	player_control_get_facing_direction(local_player_index, &now);
++	if (normalize3d(&now) < 0.5f)
++		return FALSE;
++	cross_product3d(&views[local_player_index].forward, &now, &axis);
++	sine = normalize3d(&axis);
++	cosine = dot_product3d(&views[local_player_index].forward, &now);
++	/* (no turn since the tick, or one too large to be a frame's) */
++	if (sine < 0.0001f || cosine < 0.5f)
++		return FALSE;
++	*result = *camera;
++	vector_from_points3d(&views[local_player_index].eye, &camera->position, &offset);
++	third_person_turn(&axis, cosine, sine, &offset, &turned);
++	result->position.x = views[local_player_index].eye.x + turned.i;
++	result->position.y = views[local_player_index].eye.y + turned.j;
++	result->position.z = views[local_player_index].eye.z + turned.k;
++	third_person_turn(&axis, cosine, sine, &camera->forward, &result->forward);
++	normalize3d(&result->forward);
++	observer_up_from_forward(&result->forward, &result->up);
++	return TRUE;
++}
++
 +void third_person_converge(short local_player_index, struct observer_result *result)
 +{
 +	real_point3d target;
@@ -5805,7 +5850,7 @@
 +}
 --- /dev/null
 +++ b/port/linux/game/third_person.h
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,31 @@
 +/* The view over the shoulder, on foot (third_person.c): TRUCOS, MAS TRUCOS,
 +TERCERA PERSONA (from Halo Content Evolved's, by Watanoge, AGPL). */
 +#ifndef THIRD_PERSON_H
@@ -5829,6 +5874,12 @@
 +/* (observer_postcheck) the view turned to what the eye's line hits, so that
 +the screen's middle is where the shot goes */
 +void third_person_converge(short local_player_index, struct observer_result *result);
++/* port (trucos): the frame's view (render_interpolation.c), the camera turned
++about the eye by how far the player has turned since the tick, as first
++person's direct camera does: the view turns the frame the player turns.
++Whether it did (result then holds it). */
++boolean third_person_direct(short local_player_index, struct observer_result const *camera,
++	struct observer_result *result);
 +
 +#endif
 --- a/source/camera/director.c
@@ -6039,3 +6090,27 @@
  				first_person_camera_deterministic(player->unit_index, &aim_position, &aim_forward);
  			if (aim_assist(&parameters, &aim_position, &aim_forward, aiming_unit_index, player->team_index, &target))
  			{
+--- a/port/linux/game/render_interpolation.c
++++ b/port/linux/game/render_interpolation.c
+@@ -44,6 +44,7 @@
+ #include "game/players.h"
+ #include "render/render_cameras.h"
+ #include "units/units.h"
++#include "third_person.h" /* port (trucos): the view over the shoulder (TRUCOS, TERCERA PERSONA) */
+ 
+ /* port/linux/src/port_config.c */
+ int config_boolean(const char *name);
+@@ -707,6 +708,13 @@
+ 	short local_player_index,
+ 	struct observer_result const *observer)
+ {
++	/* port (trucos): over the shoulder, the camera turned about the eye the
++	frame the player turns (third_person.c), on Android too */
++	if (local_player_index >= 0 && local_player_index < MAXIMUM_LOCAL_PLAYERS &&
++		third_person_direct(local_player_index, observer, &direct_cameras[local_player_index]))
++	{
++		return &direct_cameras[local_player_index];
++	}
+ #ifdef HALO_ANDROID
+ 	(void)local_player_index;
+ 	return observer;
