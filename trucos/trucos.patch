@@ -585,7 +585,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -582,6 +582,216 @@
+@@ -582,6 +582,217 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -660,8 +660,9 @@
 +		"\"random\" (two different ones, each time a level starts). Those the level has not\n"
 +		"got are copied from the other campaign maps, as cheats.import_weapons's are." },
 +	{ "cheats.loadout_primary", _config_string, "\"assault_rifle\"", "HALO_CHEATS_LOADOUT_PRIMARY", _environment_value, _platform_all,
-+		"cheats.loadout \"set\"'s first weapon: pistol, assault_rifle, shotgun, sniper_rifle,\n"
-+		"rocket_launcher, plasma_pistol, plasma_rifle or needler." },
++		"cheats.loadout \"set\"'s first weapon, one of cheats.one_weapon's: pistol, assault_rifle,\n"
++		"shotgun, sniper_rifle, rocket_launcher, flamethrower, plasma_pistol, plasma_rifle,\n"
++		"needler, fuel_rod or energy_sword." },
 +	{ "cheats.loadout_secondary", _config_string, "\"pistol\"", "HALO_CHEATS_LOADOUT_SECONDARY", _environment_value, _platform_all,
 +		"cheats.loadout \"set\"'s second weapon: one of the first's, or none." },
 +	{ "cheats.third_person", _config_boolean, "false", "HALO_CHEATS_THIRD_PERSON", _environment_value, _platform_all,
@@ -834,7 +835,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -560,6 +560,238 @@
+@@ -560,6 +560,241 @@
      ],
  }
  
@@ -947,9 +948,12 @@
 +# (trucos) ARMAS AL EMPEZAR: opened after a campaign level's difficulty
 +# (menu_functions.c's trucos_armas_screen_open), with ESCOGER ARMAS AL EMPEZAR
 +# on; its OK starts the level (_armas_inicio_screen)
++# (UN ARMA's, all of them: trucos_armas.c's trucos_armas_loadout_choices)
 +LOADOUT_WEAPONS = [("PISTOLA", "pistol"), ("RIFLE DE ASALTO", "assault_rifle"), ("ESCOPETA", "shotgun"),
 +                   ("FRANCOTIRADOR", "sniper_rifle"), ("LANZACOHETES", "rocket_launcher"),
-+                   ("PISTOLA PLASMA", "plasma_pistol"), ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler")]
++                   ("LANZALLAMAS", "flamethrower"), ("PISTOLA PLASMA", "plasma_pistol"),
++                   ("RIFLE PLASMA", "plasma_rifle"), ("NEEDLER", "needler"), ("CANON COMBUSTIBLE", "fuel_rod"),
++                   ("ESPADA DE ENERGIA", "energy_sword")]
 +SCREENS["network_setup/cheats_armas_inicio"] = {
 +    "screen": "armas_inicio_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"), "spacing": 30,
 +    "rows": [
@@ -1073,7 +1077,7 @@
  # Network Setup in a game (the pause menu's SETTINGS: port/linux/game/
  # menu_tags.c's pause_network_patch): its pages alone, without the rows that
  # would drop the game (internet play) or are for the main menu (the router,
-@@ -579,6 +811,8 @@
+@@ -579,6 +814,8 @@
  # the settings whose rows have the wider spinner (a device's name)
  WIDE_SETTINGS = {"audio.output_device", "audio.input_device", "streamer.slurs", "streamer.swearing",
                   "streamer.insults", "network.listings", "network.browser_maps", "network.browser_sort"}
@@ -1082,7 +1086,7 @@
  
  # Teamplay Options' rows of the port's (_teamplay_options_extras): the
  # gametype's FORCE TEAM SPAWNS, then the host's voice chat and vote kicks;
-@@ -928,6 +1162,23 @@
+@@ -928,6 +1165,23 @@
  
  
  
@@ -1106,7 +1110,7 @@
  def settings_files() -> dict:
      """the files of the port's screens, by their names in ce/"""
      files = {}
-@@ -935,6 +1186,7 @@
+@@ -935,6 +1189,7 @@
          files[f"{PE}/{folder}".replace("/", ".") + ".xml"] = (
              _mcc_downloads() if folder == "network_setup/mcc_downloads" else
              _controller_screen() if folder == "controller_remapping" else
@@ -11496,7 +11500,7 @@
 +#endif
 --- /dev/null
 +++ b/port/linux/game/trucos_armas.c
-@@ -0,0 +1,406 @@
+@@ -0,0 +1,478 @@
 +/*
 +TRUCOS_ARMAS.C
 +
@@ -11533,6 +11537,10 @@
 +#include "../src/port_tag_packs.h"
 +
 +#include "game/game_engine.h"
++#include "cseries/cseries_windows.h"
++#include "cache/cache_files.h"
++#include "tag_files/tag_groups.h"
++#include "tag_files/tag_files.h"
 +#include "networking/network_game_globals.h"
 +#include "objects/objects.h"
 +#include "units/units.h"
@@ -11620,33 +11628,91 @@
 +static int trucos_armas_imported;
 +
 +/* ARMAS AL EMPEZAR's choices (tools/port_settings.py's cheats_armas_inicio):
-+their settings' values and their weapons */
++their settings' values and their weapons' folders, those of UN ARMA
++(cheats.c's cheat_port_weapons), all of them: a weapon is the first 'weap'
++whose name has one of its folders, the first folder first */
 +static struct
 +{
 +	char const *value;
-+	char const *name;
++	char const *folders[2];
 +} const trucos_armas_loadout_choices[] =
 +{
-+	{ "pistol", "weapons\\pistol\\pistol" },
-+	{ "assault_rifle", "weapons\\assault rifle\\assault rifle" },
-+	{ "shotgun", "weapons\\shotgun\\shotgun" },
-+	{ "sniper_rifle", "weapons\\sniper rifle\\sniper rifle" },
-+	{ "rocket_launcher", "weapons\\rocket launcher\\rocket launcher" },
-+	{ "plasma_pistol", "weapons\\plasma pistol\\plasma pistol" },
-+	{ "plasma_rifle", "weapons\\plasma rifle\\plasma rifle" },
-+	{ "needler", "weapons\\needler\\needler" },
++	{ "pistol", { "weapons\\pistol\\", NULL } },
++	{ "assault_rifle", { "weapons\\assault rifle\\", NULL } },
++	{ "shotgun", { "weapons\\shotgun\\", NULL } },
++	{ "sniper_rifle", { "weapons\\sniper rifle\\", NULL } },
++	{ "rocket_launcher", { "weapons\\rocket launcher\\", NULL } },
++	{ "flamethrower", { "weapons\\flamethrower\\", NULL } },
++	{ "plasma_pistol", { "weapons\\plasma pistol\\", NULL } },
++	{ "plasma_rifle", { "weapons\\plasma rifle\\", NULL } },
++	{ "needler", { "weapons\\needler\\", NULL } },
++	{ "fuel_rod", { "weapons\\fuel rod gun\\", "weapons\\plasma_cannon\\" } },
++	{ "energy_sword", { "weapons\\energy sword\\", NULL } },
 +};
 +
-+#define TRUCOS_ARMAS_LOADOUT_CHOICES (sizeof(trucos_armas_loadout_choices) / sizeof(trucos_armas_loadout_choices[0]))
++#define TRUCOS_ARMAS_LOADOUT_CHOICES ((int)(sizeof(trucos_armas_loadout_choices) / sizeof(trucos_armas_loadout_choices[0])))
 +
-+/* the level's ARMAS AL EMPEZAR, as it loaded: the two weapons' names (NULL:
++/* the level's ARMAS AL EMPEZAR, as it loaded: the two weapons' choices (NONE:
 +none) and definitions (NONE: the level has not got it) */
 +static struct
 +{
-+	char const *names[2];
++	int choices[2];
 +	long weapons[2];
 +	int ready;
 +} trucos_armas_loadout;
++
++/* a tag's name has the folder (as cheats.c's cheat_port_name_has) */
++static int trucos_armas_name_has(char const *name, char const *folder)
++{
++	for (; name && *name; name++)
++	{
++		int index;
++
++		for (index = 0; folder[index] && name[index] && (name[index] | 0x20) == (folder[index] | 0x20); index++)
++			;
++		if (!folder[index])
++			return 1;
++	}
++	return 0;
++}
++
++/* the weapon's name is one of the choice's */
++static int trucos_armas_choice_has(int choice, char const *name)
++{
++	int folder;
++
++	for (folder = 0; choice != NONE && folder < 2; folder++)
++	{
++		char const *at = trucos_armas_loadout_choices[choice].folders[folder];
++
++		if (at && trucos_armas_name_has(name, at))
++			return 1;
++	}
++	return 0;
++}
++
++/* the level's weapon of the choice, NONE when it has none */
++static long trucos_armas_choice_weapon(int choice)
++{
++	int folder;
++
++	for (folder = 0; choice != NONE && folder < 2; folder++)
++	{
++		char const *at = trucos_armas_loadout_choices[choice].folders[folder];
++		struct tag_iterator iterator;
++		long tag_index;
++
++		if (!at)
++			continue;
++		tag_iterator_new(&iterator, 'weap');
++		for (tag_index = tag_iterator_next(&iterator); tag_index != NONE; tag_index = tag_iterator_next(&iterator))
++		{
++			if (trucos_armas_name_has(tag_get_name(tag_index), at))
++				return tag_index;
++		}
++	}
++	return NONE;
++}
 +
 +static int trucos_armas_campaign_map(char const *scenario_name)
 +{
@@ -11685,17 +11751,17 @@
 +	return config_boolean("cheats.loadout_ask") && mode && (!_stricmp(mode, "set") || !_stricmp(mode, "random"));
 +}
 +
-+/* a setting's choice's weapon, NULL for none or another word */
-+static char const *trucos_armas_loadout_name(char const *value)
++/* a setting's choice, NONE for none or another word */
++static int trucos_armas_loadout_choice(char const *value)
 +{
-+	unsigned long index;
++	int index;
 +
 +	for (index = 0; value && index < TRUCOS_ARMAS_LOADOUT_CHOICES; index++)
 +	{
 +		if (!_stricmp(value, trucos_armas_loadout_choices[index].value))
-+			return trucos_armas_loadout_choices[index].name;
++			return index;
 +	}
-+	return NULL;
++	return NONE;
 +}
 +
 +/* the level's two: the settings' ("set"), or two different ones at random
@@ -11704,35 +11770,25 @@
 +{
 +	char const *mode = config_string("cheats.loadout");
 +
-+	trucos_armas_loadout.names[0] = NULL;
-+	trucos_armas_loadout.names[1] = NULL;
++	trucos_armas_loadout.choices[0] = NONE;
++	trucos_armas_loadout.choices[1] = NONE;
 +	if (!trucos_armas_loadout_chosen())
 +		return;
 +	if (!_stricmp(mode, "random"))
 +	{
 +		unsigned long seed = system_milliseconds() * 2654435761UL;
-+		unsigned long first = (seed >> 7) % TRUCOS_ARMAS_LOADOUT_CHOICES;
-+		unsigned long second = (first + 1 + (seed >> 17) % (TRUCOS_ARMAS_LOADOUT_CHOICES - 1)) %
-+			TRUCOS_ARMAS_LOADOUT_CHOICES;
++		int first = (int)((seed >> 7) % TRUCOS_ARMAS_LOADOUT_CHOICES);
++		int second = (int)((first + 1 + (seed >> 17) % (TRUCOS_ARMAS_LOADOUT_CHOICES - 1)) % TRUCOS_ARMAS_LOADOUT_CHOICES);
 +
-+		trucos_armas_loadout.names[0] = trucos_armas_loadout_choices[first].name;
-+		trucos_armas_loadout.names[1] = trucos_armas_loadout_choices[second].name;
++		trucos_armas_loadout.choices[0] = first;
++		trucos_armas_loadout.choices[1] = second;
 +		return;
 +	}
-+	trucos_armas_loadout.names[0] = trucos_armas_loadout_name(config_string("cheats.loadout_primary"));
-+	trucos_armas_loadout.names[1] = trucos_armas_loadout_name(config_string("cheats.loadout_secondary"));
-+	if (trucos_armas_loadout.names[1] && trucos_armas_loadout.names[0] &&
-+		!_stricmp(trucos_armas_loadout.names[0], trucos_armas_loadout.names[1]))
-+	{
-+		trucos_armas_loadout.names[1] = NULL;
-+	}
++	trucos_armas_loadout.choices[0] = trucos_armas_loadout_choice(config_string("cheats.loadout_primary"));
++	trucos_armas_loadout.choices[1] = trucos_armas_loadout_choice(config_string("cheats.loadout_secondary"));
++	if (trucos_armas_loadout.choices[1] == trucos_armas_loadout.choices[0])
++		trucos_armas_loadout.choices[1] = NONE;
 +	return;
-+}
-+
-+static int trucos_armas_loadout_wants(char const *name)
-+{
-+	return (trucos_armas_loadout.names[0] && !_stricmp(name, trucos_armas_loadout.names[0])) ||
-+		(trucos_armas_loadout.names[1] && !_stricmp(name, trucos_armas_loadout.names[1]));
 +}
 +
 +/* (with the level's tags all in) the two weapons' definitions */
@@ -11743,17 +11799,19 @@
 +	trucos_armas_loadout.ready = 0;
 +	for (index = 0; index < 2; index++)
 +	{
-+		trucos_armas_loadout.weapons[index] = trucos_armas_loadout.names[index] ?
-+			tag_loaded('weap', trucos_armas_loadout.names[index]) : NONE;
++		int choice = trucos_armas_loadout.choices[index];
++
++		trucos_armas_loadout.weapons[index] = trucos_armas_choice_weapon(choice);
 +		if (trucos_armas_loadout.weapons[index] != NONE)
++		{
 +			trucos_armas_loadout.ready = 1;
-+		else if (trucos_armas_loadout.names[index])
-+			platform_log("trucos: ARMAS AL EMPEZAR: %s has not got %s", scenario_name, trucos_armas_loadout.names[index]);
-+	}
-+	if (trucos_armas_loadout.ready)
-+	{
-+		platform_log("trucos: ARMAS AL EMPEZAR: %s, %s", trucos_armas_loadout.names[0] ? trucos_armas_loadout.names[0] : "none",
-+			trucos_armas_loadout.names[1] ? trucos_armas_loadout.names[1] : "none");
++			platform_log("trucos: ARMAS AL EMPEZAR: %s", tag_get_name(trucos_armas_loadout.weapons[index]));
++		}
++		else if (choice != NONE)
++		{
++			platform_log("trucos: ARMAS AL EMPEZAR: %s has not got %s", scenario_name,
++				trucos_armas_loadout_choices[choice].value);
++		}
 +	}
 +	return;
 +}
@@ -11810,22 +11868,29 @@
 +void trucos_armas_tags_loaded(char const *scenario_name)
 +{
 +	char wanted[TRUCOS_ARMAS_WEAPON_COUNT];
++	int needed[2];
 +	unsigned long weapon, map;
 +	long left = 0, asked = 0;
-+	int all;
++	int all, slot;
 +
 +	trucos_armas_loadout.ready = 0;
 +	if (!scenario_name || !trucos_armas_campaign_map(scenario_name))
 +		return;
 +	all = config_boolean("cheats.import_weapons");
 +	trucos_armas_loadout_choose();
-+	if (!all && !trucos_armas_loadout.names[0] && !trucos_armas_loadout.names[1])
++	if (!all && trucos_armas_loadout.choices[0] == NONE && trucos_armas_loadout.choices[1] == NONE)
 +		return;
 +	for (weapon = 0; weapon < TRUCOS_ARMAS_WEAPON_COUNT; weapon++)
 +	{
-+		wanted[weapon] = (all || trucos_armas_loadout_wants(trucos_armas_weapons[weapon])) &&
-+			tag_loaded('weap', trucos_armas_weapons[weapon]) == NONE;
++		wanted[weapon] = all && tag_loaded('weap', trucos_armas_weapons[weapon]) == NONE;
 +		left += wanted[weapon];
++	}
++	/* ARMAS AL EMPEZAR's two the level has not got, whatever their names */
++	for (slot = 0; slot < 2; slot++)
++	{
++		needed[slot] = trucos_armas_loadout.choices[slot] != NONE &&
++			trucos_armas_choice_weapon(trucos_armas_loadout.choices[slot]) == NONE;
++		left += needed[slot];
 +	}
 +	if (!left)
 +	{
@@ -11859,6 +11924,7 @@
 +		for (index = 0; index < count && left > 0; index++)
 +		{
 +			char const *name;
++			int take = 0;
 +
 +			if (tag_import_tag_group(donor, index) != 'weap')
 +				continue;
@@ -11869,15 +11935,25 @@
 +			{
 +				if (wanted[weapon] && !_stricmp(name, trucos_armas_weapons[weapon]))
 +				{
-+					if (tag_import_want(donor, index))
-+					{
-+						asked++;
-+						platform_log("trucos: TRAER ARMAS: %s from %s", name, trucos_armas_maps[map]);
-+					}
 +					wanted[weapon] = 0;
 +					left--;
++					take = 1;
 +					break;
 +				}
++			}
++			for (slot = 0; slot < 2; slot++)
++			{
++				if (needed[slot] && trucos_armas_choice_has(trucos_armas_loadout.choices[slot], name))
++				{
++					needed[slot] = 0;
++					left--;
++					take = 1;
++				}
++			}
++			if (take && tag_import_want(donor, index))
++			{
++				asked++;
++				platform_log("trucos: TRAER ARMAS: %s from %s", name, trucos_armas_maps[map]);
 +			}
 +		}
 +		tag_import_release(donor);
