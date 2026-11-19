@@ -8,7 +8,7 @@
 - `.github/workflows/build-android.yml` compila el APK:
   - En `main` sale la versión oficial (Release "Latest", `Halo C.E con trucos - OpenCE build-N (#n)`, paquete `com.halo.decomp`).
   - En `pruebas` sale un borrador privado (`PRUEBA (pruebas) - OpenCE ...`, paquete `com.halo.decomp.pruebas`). Sin versión indicada, usa el último tag de arriba.
-- `.github/workflows/vigilar-opence.yml` corre todos los días a las 6:17 a. m. de Colombia. Si arriba hay una versión nueva, lanza `build-android.yml` en `main` con esa versión.
+- `.github/workflows/vigilar-opence.yml` está programado todos los días a las 6:17 a. m. de Colombia, pero GitHub suele lanzarlo horas después (en noviembre de 2026, hacia las 2 p. m.). Si arriba hay una versión nueva, lanza `build-android.yml` en `main` con esa versión.
 - Si una compilación falla, se abre el issue **"La compilacion fallo"**. Mientras esté abierto, el vigilante no lanza nada.
 
 ## Reglas
