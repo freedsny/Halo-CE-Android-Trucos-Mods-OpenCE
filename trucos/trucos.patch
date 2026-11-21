@@ -585,7 +585,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -582,6 +582,217 @@
+@@ -582,6 +582,232 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -800,6 +800,21 @@
 +	{ "hud.grenades_fy", _config_integer, "0", "HALO_HUD_GRENADES_FY", _environment_value, _platform_all,
 +		"The fine adjustment of hud.grenades_y, added to it: so 625 is 600 and 25.\n"
 +		"In HUD units (the tags' 640x480). 0: none." },
++	/* port (trucos): GRAFICOS (pause menu, SETTINGS, TRUCOS, GRAFICOS): a
++	preset of the display settings, and three grades of the 3D view that
++	d3d8_gl.c's tone mapping applies (with display.hdr) */
++	{ "graficos.preset", _config_string, "\"personal\"", "HALO_GRAFICOS_PRESET", _environment_value, _platform_all,
++		"GRAFICOS (TRUCOS): \"original\" (as the Xbox), \"mejorados\" or \"maximos\" set\n"
++		"the display settings below once, when chosen; \"personal\" leaves them as\n"
++		"they are." },
++	{ "graficos.color", _config_real, "1.0", "HALO_GRAFICOS_COLOR", _environment_value, _platform_all,
++		"With display.hdr, the 3D view's colour saturation, 0.5 to 1.6: 1.0 as drawn,\n"
++		"more for livelier colours." },
++	{ "graficos.sombras", _config_real, "1.0", "HALO_GRAFICOS_SOMBRAS", _environment_value, _platform_all,
++		"With display.hdr, how much the dark parts of the 3D view are lifted, 1.0 to\n"
++		"2.0: 1.0 as drawn; more lightens the shadows and keeps the highlights." },
++	{ "graficos.nitidez", _config_real, "0.0", "HALO_GRAFICOS_NITIDEZ", _environment_value, _platform_all,
++		"With display.hdr, the 3D view's sharpening, 0.0 (none) to 1.0." },
  
  	{ "game.downloaded_maps", _config_string, "\"\"", "HALO_DOWNLOADED_MAPS", _environment_value, _platform_all,
  		"Maps played as downloaded ones, besides those map sharing downloaded:\n"
@@ -835,7 +850,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -560,6 +560,242 @@
+@@ -560,6 +560,285 @@
      ],
  }
  
@@ -871,10 +886,12 @@
 +
 +SCREENS["network_setup/cheats"] = {
 +    "screen": "cheats_settings_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"),
-+    # (eleven rows: a 25px step, as the server settings' 24, and the help lower,
-+    # as Video Setup's, keep the last one clear of the help)
-+    "spacing": 25, "help_top": 356, "help_height": 54, "rows": [],
++    # (twelve rows: a 24px step, as the server settings' 22, and the help lower,
++    # as theirs, keep the last one clear of the help)
++    "spacing": 24, "help_top": 366, "help_height": 48, "rows": [],
 +    "categories": [
++        ("GRAFICOS:", "network_setup/cheats_graficos",
++         "Que el juego se vea mejor: bordes suaves, texturas\\nnitidas, sombras, brillo y color."),
 +        ("TRUCOS:", "network_setup/cheats_toggles",
 +         "Municion infinita, modo dios, super salto y mas.\\nSolo en partidas que no son en red."),
 +        ("ARMAS, LINTERNA Y MAS:", "network_setup/cheats_items",
@@ -897,6 +914,47 @@
 +         "Una flecha con los metros que te indica el camino:\\nel objetivo de la mision, un aliado o un enemigo."),
 +        ("AJUSTES:", "network_setup/cheats_ajustes",
 +         "Brillo (HDR), bots, desbloquear niveles y\\nanimaciones mejoradas."),
++    ],
++}
++# GRAFICOS (port/linux/src/d3d8_gl.c's graficos_preset_read and hdr_read,
++# xgpu_post.c's tone mapping): a preset that writes the display settings below
++# once when chosen, the settings themselves, and three grades of the 3D view
++# that the HDR pass applies
++SCREENS["network_setup/cheats_graficos"] = {
++    "screen": "cheats_graficos_screen", "header": ("header_trucos", f"{PE}/network_setup/cheats/header_trucos"),
++    "spacing": 24, "help_top": 366, "help_height": 48,
++    "rows": [
++        ("PRESET:", "graficos.preset",
++         [("PERSONAL", "personal"), ("ORIGINAL", "original"), ("MEJORADOS", "mejorados"), ("MAXIMOS", "maximos")],
++         "Elige uno y pon todo de una vez. Mejorados: lo\\nrecomendado. Maximos: puede bajar la fluidez.", None),
++        ("BORDES SUAVES:", "display.anti_aliasing",
++         [("NO", "off"), ("FXAA", "fxaa"), ("MSAA 2X", "msaa2x"), ("MSAA 4X", "msaa4x")],
++         "Quita los bordes dentados. FXAA es liviano;\\nMSAA es mas nitido y pesa mas.", None),
++        ("TEXTURAS NITIDAS:", "display.anisotropic_filtering",
++         [("NO", "0"), ("2X", "2"), ("4X", "4"), ("8X", "8"), ("16X", "16")],
++         "Suelos y paredes nitidos de lejos.\\nNo: como el Xbox.", None),
++        ("SOMBRAS:", "display.shadow_resolution",
++         [("128", "128"), ("256", "256"), ("512", "512"), ("1024", "1024")],
++         "Calidad de las sombras de los objetos.\\n128: como el Xbox.", None),
++        ("LUZ POR PIXEL:", "display.per_pixel_lighting", [("SI", "true"), ("NO", "false")],
++         "Luz mas suave en personajes, armas y vehiculos,\\nsin las facetas del Xbox.", None),
++        ("DETALLE DE MODELOS:", "display.model_detail",
++         [("ORIGINAL", "stock"), ("PANTALLA", "native"), ("MAXIMO", "highest")],
++         "Original: como el Xbox. Pantalla: mas detalle\\nde lejos. Maximo: siempre el mejor.", None),
++        ("HDR (MAS BRILLO):", "display.hdr", [("SI", "true"), ("NO", "false")],
++         "Necesario para el brillo, el color, las sombras\\ny la nitidez de abajo.", None),
++        ("BRILLO:", "display.hdr_exposure",
++         [(v, v) for v in ("0.75", "1.0", "1.25", "1.5", "1.75", "2.0", "2.5", "3.0")],
++         "Brillo de toda la imagen (con HDR).\\n1.0 es lo normal.", None),
++        ("ACLARAR SOMBRAS:", "graficos.sombras",
++         [("NO", "1.0"), ("POCO", "1.1"), ("MEDIO", "1.2"), ("BASTANTE", "1.35"), ("MUCHO", "1.5")],
++         "Aclara las partes oscuras sin quemar las claras\\n(con HDR). Para cuando se ve muy oscuro.", None),
++        ("COLOR:", "graficos.color",
++         [("GRIS", "0.75"), ("NORMAL", "1.0"), ("VIVO", "1.15"), ("MAS VIVO", "1.3"), ("INTENSO", "1.45")],
++         "Que tan vivos se ven los colores (con HDR).", None),
++        ("NITIDEZ:", "graficos.nitidez",
++         [("NO", "0.0"), ("POCA", "0.2"), ("MEDIA", "0.35"), ("ALTA", "0.5"), ("MAXIMA", "0.75")],
++         "Imagen mas definida (con HDR). Mucha puede\\nmostrar bordes brillantes.", None),
 +    ],
 +}
 +SCREENS["network_setup/cheats_toggles"] = {
@@ -1078,7 +1136,7 @@
  # Network Setup in a game (the pause menu's SETTINGS: port/linux/game/
  # menu_tags.c's pause_network_patch): its pages alone, without the rows that
  # would drop the game (internet play) or are for the main menu (the router,
-@@ -579,6 +815,8 @@
+@@ -579,6 +858,8 @@
  # the settings whose rows have the wider spinner (a device's name)
  WIDE_SETTINGS = {"audio.output_device", "audio.input_device", "streamer.slurs", "streamer.swearing",
                   "streamer.insults", "network.listings", "network.browser_maps", "network.browser_sort"}
@@ -1087,7 +1145,7 @@
  
  # Teamplay Options' rows of the port's (_teamplay_options_extras): the
  # gametype's FORCE TEAM SPAWNS, then the host's voice chat and vote kicks;
-@@ -928,6 +1166,23 @@
+@@ -928,6 +1209,23 @@
  
  
  
@@ -1111,7 +1169,7 @@
  def settings_files() -> dict:
      """the files of the port's screens, by their names in ce/"""
      files = {}
-@@ -935,6 +1190,7 @@
+@@ -935,6 +1233,7 @@
          files[f"{PE}/{folder}".replace("/", ".") + ".xml"] = (
              _mcc_downloads() if folder == "network_setup/mcc_downloads" else
              _controller_screen() if folder == "controller_remapping" else
@@ -12496,3 +12554,220 @@
  	}
  
  	return valid;
+--- a/port/linux/src/d3d8_gl.c
++++ b/port/linux/src/d3d8_gl.c
+@@ -2358,6 +2358,57 @@
+ 	}
+ }
+ 
++/* port (trucos): GRAFICOS (graficos.preset, TRUCOS): when the preset is
++changed to one of its sets, the display settings it names are written once,
++as if each had been chosen in its own screen; "personal" (and the value the
++game starts with) leaves them as they are */
++static void graficos_preset_read(void)
++{
++	static char last[16];
++	static BOOL seen = FALSE;
++	static const struct
++	{
++		const char *name;
++		/* the settings' values: original, mejorados, maximos */
++		const char *values[3];
++	} graficos_settings[] =
++	{
++		{ "display.anti_aliasing", { "off", "fxaa", "msaa4x" } },
++		{ "display.anisotropic_filtering", { "0", "8", "16" } },
++		{ "display.shadow_resolution", { "128", "512", "1024" } },
++		{ "display.per_pixel_lighting", { "false", "true", "true" } },
++		{ "display.model_detail", { "stock", "native", "highest" } },
++		{ "display.hdr", { "false", "true", "true" } },
++		{ "display.hdr_tone_mapping", { "gt7", "neutral", "neutral" } },
++		{ "display.hdr_exposure", { "1.0", "1.25", "1.25" } },
++		{ "graficos.color", { "1.0", "1.15", "1.15" } },
++		{ "graficos.sombras", { "1.0", "1.2", "1.2" } },
++		{ "graficos.nitidez", { "0.0", "0.2", "0.35" } },
++	};
++	const char *preset = config_string("graficos.preset");
++	int set = -1;
++	unsigned int index;
++
++	if (seen && !strcmp(preset, last))
++		return;
++	if (seen)
++	{
++		if (!strcmp(preset, "original"))
++			set = 0;
++		else if (!strcmp(preset, "mejorados"))
++			set = 1;
++		else if (!strcmp(preset, "maximos"))
++			set = 2;
++	}
++	seen = TRUE;
++	snprintf(last, sizeof(last), "%s", preset);
++	if (set < 0)
++		return;
++	platform_log("GRAFICOS: %s", preset);
++	for (index = 0; index < sizeof(graficos_settings) / sizeof(graficos_settings[0]); index++)
++		config_write(graficos_settings[index].name, graficos_settings[index].values[set]);
++}
++
+ /* display.hdr's settings, if they have changed: the back buffer's entries
+ are made again in the format it takes (what they held is lost, and a frame
+ clears them before it draws) */
+@@ -2365,6 +2416,7 @@
+ {
+ 	const char *curve;
+ 	double exposure;
++	double saturation, shadows, sharpen;
+ 	BOOL wanted, supported = TRUE, active;
+ 	struct render_target_entry *entry;
+ 	int value;
+@@ -2389,6 +2441,9 @@
+ 		hdr.tone_mapping.peak = 1.0f;
+ 		hdr.tone_mapping.paper = 0.0f;
+ 	}
++	/* port (trucos): GRAFICOS' preset first, whose settings are then read
++	below (its writes move config_changes before it is kept) */
++	graficos_preset_read();
+ 	hdr.read = TRUE;
+ 	hdr.read_at = config_changes();
+ 	curve = config_string("display.hdr_tone_mapping");
+@@ -2400,6 +2455,16 @@
+ 	{
+ 	}
+ 	exposure = !(exposure >= 0.25) ? 0.25 : exposure > 4.0 ? 4.0 : exposure;
++	/* port (trucos): GRAFICOS' grades, within their ranges */
++	saturation = config_real("graficos.color");
++	shadows = config_real("graficos.sombras");
++	sharpen = config_real("graficos.nitidez");
++	saturation = !(saturation >= 0.5) ? 0.5 : saturation > 1.6 ? 1.6 : saturation;
++	shadows = !(shadows >= 1.0) ? 1.0 : shadows > 2.0 ? 2.0 : shadows;
++	sharpen = !(sharpen >= 0.0) ? 0.0 : sharpen > 1.0 ? 1.0 : sharpen;
++	hdr.tone_mapping.saturation = (float)saturation;
++	hdr.tone_mapping.shadows = (float)shadows;
++	hdr.tone_mapping.sharpen = (float)sharpen;
+ #ifdef HALO_GLES
+ 	supported = xgpu_capabilities.color_buffer_half_float;
+ #endif
+@@ -2409,8 +2474,9 @@
+ 		(active && (value != hdr.tone_mapping.curve || (float)exposure != hdr.tone_mapping.exposure)))
+ 	{
+ 		if (active)
+-			platform_log("HDR: on, %s tone mapping%s, exposure %.2f", tone_mapping_names[value],
+-				strcmp(curve, tone_mapping_names[value]) ? " (the setting's is unknown)" : "", exposure);
++			platform_log("HDR: on, %s tone mapping%s, exposure %.2f, color %.2f, sombras %.2f, nitidez %.2f",
++				tone_mapping_names[value], strcmp(curve, tone_mapping_names[value]) ? " (the setting's is unknown)" : "",
++				exposure, saturation, shadows, sharpen);
+ 		else if (wanted && !supported)
+ 			platform_log("HDR: the GPU cannot draw into half floats, so off");
+ 		else if (wanted)
+--- a/port/linux/src/xgpu.h
++++ b/port/linux/src/xgpu.h
+@@ -327,6 +327,12 @@
+ 	float peak;
+ 	/* with an HDR display, paper white in GT7's units (100 nits); 0 for SDR */
+ 	float paper;
++	/* port (trucos): GRAFICOS' grades of the 3D view (graficos.color,
++	graficos.sombras, graficos.nitidez): the saturation (1.0 as drawn), the
++	lift of the dark parts (1.0 none) and the sharpening (0.0 none) */
++	float saturation;
++	float shadows;
++	float sharpen;
+ };
+ 
+ /* the tone mapping and presentation programs made now; FALSE if they
+--- a/port/linux/src/xgpu_post.c
++++ b/port/linux/src/xgpu_post.c
+@@ -85,6 +85,8 @@
+ 	GLint metrics[NUMBER_OF_POST_PROGRAMS];
+ 	GLint bounds;
+ 	GLint tone, rectangle, scale;
++	/* port (trucos): GRAFICOS' grades in the tone mapping */
++	GLint grade;
+ 	GLint fill_color, fill_ring;
+ 	/* each set's programs or textures could not be made */
+ 	BOOL failed[NUMBER_OF_POST_SETS];
+@@ -241,6 +243,9 @@
+ 	"/* the curve (xgpu.h), the exposure, the peak, and with an HDR display\n"
+ 	"GT7's unit (100 nits) in paper whites */\n"
+ 	"uniform vec4 tone;\n"
++	"/* port (trucos): GRAFICOS' grades: the saturation, the lift of the dark\n"
++	"parts, the sharpening */\n"
++	"uniform vec4 grade;\n"
+ 	"out vec4 result;\n"
+ 	"\n"
+ 	"const float GAMMA = 2.2;\n"
+@@ -326,9 +331,28 @@
+ 
+ 	"void main()\n"
+ 	"{\n"
+-	"\tvec3 color = pow(max(texelFetch(color_texture, ivec2(gl_FragCoord.xy), 0).rgb, vec3(0.0)), vec3(GAMMA)) * tone.y;\n"
++	"\tivec2 here = ivec2(gl_FragCoord.xy);\n"
++	"\tvec3 drawn = max(texelFetch(color_texture, here, 0).rgb, vec3(0.0));\n"
++	"\tvec3 color;\n"
+ 	"\tfloat peak = tone.z;\n"
+ 	"\n"
++	"\t/* port (trucos): GRAFICOS' sharpening, against the four neighbours (each\n"
++	"\tinside the texture), and the lift of the dark parts, as drawn */\n"
++	"\tif (grade.z > 0.0)\n"
++	"\t{\n"
++	"\t\tivec2 last = textureSize(color_texture, 0) - ivec2(1);\n"
++	"\t\tvec3 around = texelFetch(color_texture, clamp(here + ivec2(1, 0), ivec2(0), last), 0).rgb +\n"
++	"\t\t\ttexelFetch(color_texture, clamp(here - ivec2(1, 0), ivec2(0), last), 0).rgb +\n"
++	"\t\t\ttexelFetch(color_texture, clamp(here + ivec2(0, 1), ivec2(0), last), 0).rgb +\n"
++	"\t\t\ttexelFetch(color_texture, clamp(here - ivec2(0, 1), ivec2(0), last), 0).rgb;\n"
++	"\t\tvec3 sharp = drawn + (drawn - max(around, vec3(0.0)) * 0.25) * grade.z;\n"
++	"\n"
++	"\t\tdrawn = clamp(sharp, min(drawn, vec3(1.0)) * 0.5, max(drawn, vec3(1.0)));\n"
++	"\t}\n"
++	"\tif (grade.y > 1.0)\n"
++	"\t\tdrawn = pow(min(drawn, vec3(1.0)), vec3(1.0 / grade.y)) + max(drawn - vec3(1.0), vec3(0.0));\n"
++	"\tcolor = pow(drawn, vec3(GAMMA)) * tone.y;\n"
++	"\n"
+ 	"\tif (tone.x < 0.5)\n"
+ 	"\t{\n"
+ 	"\t\tfloat knee = KNEE * peak;\n"
+@@ -369,7 +393,10 @@
+ 	"\t\t\tdot(mapped, vec3(-0.124550, 1.132900, -0.008349)), dot(mapped, vec3(-0.018151, -0.100579, 1.118730))),\n"
+ 	"\t\t\tvec3(0.0));\n"
+ 	"\t}\n"
+-	"\tresult = vec4(pow(min(color, vec3(peak)), vec3(1.0 / GAMMA)), 1.0);\n"
++	"\tcolor = pow(min(color, vec3(peak)), vec3(1.0 / GAMMA));\n"
++	"\t/* port (trucos): GRAFICOS' saturation, about the colour's grey */\n"
++	"\tcolor = max(mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, grade.x), vec3(0.0));\n"
++	"\tresult = vec4(color, 1.0);\n"
+ 	"}\n";
+ 
+ /* the back buffer into the window: the window's rows are from the bottom */
+@@ -535,7 +562,10 @@
+ 	if (which == _post_program_fxaa)
+ 		post.bounds = glGetUniformLocation(program, "bounds");
+ 	else if (which == _post_program_tone_map)
++	{
+ 		post.tone = glGetUniformLocation(program, "tone");
++		post.grade = glGetUniformLocation(program, "grade");
++	}
+ 	else if (which == _post_program_present)
+ 	{
+ 		post.rectangle = glGetUniformLocation(program, "rectangle");
+@@ -805,6 +835,7 @@
+ 	const GLint corners[4], const struct xgpu_tone_mapping *tone_mapping)
+ {
+ 	float tone[4];
++	float grade[4];
+ 
+ 	if (!xgpu_post_prepare_hdr())
+ 		return FALSE;
+@@ -824,6 +855,12 @@
+ 	texture_bind(0, source_texture);
+ 	glUseProgram(post.programs[_post_program_tone_map]);
+ 	glUniform4fv(post.tone, 1, tone);
++	/* port (trucos): GRAFICOS' grades */
++	grade[0] = tone_mapping->saturation;
++	grade[1] = tone_mapping->shadows;
++	grade[2] = tone_mapping->sharpen;
++	grade[3] = 0.0f;
++	glUniform4fv(post.grade, 1, grade);
+ 	pass_draw(_post_program_tone_map, destination, corners, TRUE);
+ 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+ 	return TRUE;

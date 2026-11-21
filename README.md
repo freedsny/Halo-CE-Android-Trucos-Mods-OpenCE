@@ -99,6 +99,7 @@ Todo está dentro de **TRUCOS** (pausa > AJUSTES > TRUCOS):
 
 | Pantalla | Qué tiene |
 |---|---|
+| **GRAFICOS** | Preset (original, mejorados, máximos), bordes suaves, texturas nítidas, sombras, luz por píxel, detalle de modelos, HDR, brillo, aclarar sombras, color y nitidez |
 | **TRUCOS** | Munición infinita, sin recargar, súper salto, modo dios, matar de un golpe, medusa, jetpack, poseer al chocar, sentir el daño de otros |
 | **ARMAS, LINTERNA Y MAS** | Todas las armas, todos los vehículos, un arma, un vehículo, todos los powerups, sobrescudo infinito, camuflaje, luz infinita, linterna amplia, teletransporte |
 | **MAS TRUCOS** | Forzar punto de control, sin daño por caída, no caer del vehículo, traer armas de otras misiones, escoger armas al empezar, tercera persona (hombro y distancia) |
@@ -223,6 +224,25 @@ El rombo rojo del borde del radar **apunta hacia tu objetivo**: el mismo lugar q
 | **RADAR HORIZONTAL / VERTICAL** (y FINO) | Moverlo de lugar, como las demás partes del HUD (o con el dedo en el editor) |
 
 Para tener el **radar original del juego, tal cual**: RADAR REDONDO OFF, RADAR CON BARRIDO OFF y, en HUD: ESTILO, HUD MODERNO OFF.
+
+### Gráficos
+En **TRUCOS > GRAFICOS**, para que el juego se vea más moderno sin cambiar su estilo. Lo más fácil: **PRESET: MEJORADOS**, que pone todo de una vez.
+
+| Opción | Valores | Qué hace |
+|---|---|---|
+| **PRESET** | Personal, original, mejorados, máximos | Al elegir uno, cambia de una vez todas las opciones de abajo. **Mejorados** es lo recomendado; **máximos** puede bajar la fluidez; **original** deja el juego como en el Xbox. Personal no toca nada |
+| **BORDES SUAVES** | No, FXAA, MSAA 2X, MSAA 4X | Quita los bordes dentados. FXAA es liviano; MSAA es más nítido y gasta más |
+| **TEXTURAS NITIDAS** | No, 2X a 16X | Suelos y paredes nítidos de lejos |
+| **SOMBRAS** | 128 a 1024 | Calidad de las sombras de los objetos (128 como el Xbox) |
+| **LUZ POR PIXEL** | Sí / No | Luz más suave en personajes, armas y vehículos |
+| **DETALLE DE MODELOS** | Original, pantalla, máximo | Más detalle en los modelos que están lejos |
+| **HDR (MAS BRILLO)** | Sí / No | Necesario para el brillo, aclarar sombras, color y nitidez |
+| **BRILLO** | 0.75 a 3.0 | El brillo de toda la imagen, 1.0 es lo normal (es la misma EXPOSICION HDR de AJUSTES) |
+| **ACLARAR SOMBRAS** | No, poco, medio, bastante, mucho | Aclara lo oscuro sin quemar lo claro. Para cuando el juego se ve muy oscuro |
+| **COLOR** | Gris, normal, vivo, más vivo, intenso | Qué tan vivos se ven los colores |
+| **NITIDEZ** | No, poca, media, alta, máxima | La imagen más definida. Mucha puede dejar bordes brillantes |
+
+Los gráficos mejorados gastan más batería y calientan más el teléfono que los originales.
 
 ### Ajustes
 En **TRUCOS > AJUSTES**:
