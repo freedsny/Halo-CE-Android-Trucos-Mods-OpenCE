@@ -106,18 +106,19 @@ Todo está dentro de **TRUCOS** (pausa > AJUSTES > TRUCOS):
 | **HUD: ESTILO** | HUD moderno ON/OFF |
 | **HUD: RADAR** | Radar redondo, tamaño del radar, barrido, y moverlo (horizontal y vertical, grueso y fino) |
 | **HUD: ESCUDO / VIDA / MUNICION / GRANADAS** | Mover cada parte (horizontal y vertical, grueso y fino) |
-| **GUIA** | Flecha guía: apagada, objetivo de la misión, aliado o enemigo cercano |
+| **GUIA** | Flecha guía: apagada, auto, objetivo de la misión, aliado o enemigo cercano |
 | **AJUSTES** | Idioma del juego, HDR, exposición, curva de tonos, desbloquear niveles, animaciones mejoradas, bots |
 
 ### Flecha guía
-Una **flecha naranja con la distancia en metros** que te indica hacia dónde ir. Se dibuja igual que los marcadores que el propio juego pone en algunas misiones: una flecha sobre el lugar y los metros debajo. Es naranja para que no se confunda con los niveles que tienen mucho azul. Si lo que busca queda detrás de ti o fuera de la pantalla, la flecha se pega al borde de la pantalla del lado por donde tienes que girar.
+Una **flecha con la distancia en metros** que te indica hacia dónde ir: naranja hacia el objetivo, roja hacia los enemigos y verde hacia un arma. Se dibuja igual que los marcadores que el propio juego pone en algunas misiones: una flecha sobre el lugar y los metros debajo. No es azul para que no se confunda con los niveles que tienen mucho azul. Si lo que busca queda detrás de ti o fuera de la pantalla, la flecha se pega al borde de la pantalla del lado por donde tienes que girar.
 
 #### Cómo activarla
-**Pausa > AJUSTES > TRUCOS > GUIA > FLECHA GUIA** (también desde **AJUSTES > tu perfil > TRUCOS > GUIA**). Tiene cuatro opciones:
+**Pausa > AJUSTES > TRUCOS > GUIA > FLECHA GUIA** (también desde **AJUSTES > tu perfil > TRUCOS > GUIA**). Tiene cinco opciones:
 
 | Opción | A dónde apunta |
 |---|---|
 | **APAGADA** | No se muestra (así viene) |
+| **AUTO** | La recomendada: elige sola lo que te sirve en cada momento. Ver [AUTO](#auto) |
 | **OBJETIVO MISION** | Al lugar al que la misión espera que llegues para avanzar |
 | **ALIADO CERCANO** | Al aliado vivo más cercano (marines y demás compañeros) |
 | **ENEMIGO CERCANO** | Al enemigo vivo más cercano |
@@ -134,6 +135,19 @@ El cambio se ve al volver al juego, sin reiniciar. La elección se guarda.
 - Está preparada para las **diez misiones**: The Pillar of Autumn, Halo, The Truth and Reconciliation, The Silent Cartographer, Assault on the Control Room, 343 Guilty Spark, The Library, Two Betrayals, Keyes y The Maw.
 - Si en un momento la misión **no espera que llegues a ningún lugar** (por ejemplo, mientras tienes que eliminar a todos los enemigos de una zona, defender un punto o esperar una escena), **la flecha no aparece**. Vuelve sola cuando la misión vuelve a esperar que camines a algún sitio.
 - Fuera de la campaña (multijugador, mapas sin misión) esta opción no muestra nada.
+
+#### AUTO
+Va cambiando sola, en este orden:
+
+1. **Un arma (flecha verde).** Si el arma que tienes en la mano se quedó sin balas, apunta al arma con balas más cercana que esté en el suelo (hasta unos 75 m), y debajo de los metros dice **SIN BALAS: TOMA ESTA ARMA**. Cuando la recoges, o cambias a un arma con balas, vuelve a lo de siempre.
+2. **Los enemigos que la misión espera que elimines (flecha roja).** Cuando la misión no avanza hasta que mueran ciertos enemigos, apunta al más cercano de ellos, y debajo de los metros dice cuántos faltan: **QUEDAN 3**, **QUEDAN 2**... Lo hace cuando esos enemigos están cerca (unos 75 m) o cuando no hay ningún lugar al que ir.
+3. **El objetivo de la misión (flecha naranja)**, como en **OBJETIVO MISION**.
+4. **El enemigo más cercano (flecha roja)**, cuando no hay nada de lo anterior. Así, en el multijugador y en los mapas sin misión, también sirve.
+
+#### Lo que dice la flecha
+- **SUBE** o **BAJA**, debajo de los metros, cuando lo que busca está en otro piso (más arriba o más abajo que tú). Sirve en los edificios de varios pisos y en las rampas.
+- **QUEDAN N** y **SIN BALAS: TOMA ESTA ARMA**, en el modo AUTO (ver arriba).
+- **OBJETIVO**: en **AUTO** y en **OBJETIVO MISION**, en un recuadro a la izquierda, debajo de los mensajes del juego, sale lo que tienes que hacer en esa parte de la misión (por ejemplo, salvar a los marines o llegar al puente). Para que no estorbe, no está siempre: sale unos **8 segundos** cuando cambia el objetivo o cuando la flecha vuelve (después de una escena, al cargar o al salir de la pausa), y luego **6 segundos cada 2 minutos**.
 
 #### Aliado y enemigo cercano
 - **Aliado**: cualquier personaje vivo que no sea tu enemigo. No apunta a los que ya tienes al lado (a menos de unos 12 metros), para que te lleve con el resto del grupo.
@@ -183,7 +197,7 @@ En **TRUCOS > HUD: ESTILO > HUD MODERNO: ON** el HUD cambia a un estilo como el 
 
 La munición y las granadas siguen siendo las del juego. Las partes nuevas también se mueven con el dedo en el editor de botones.
 
-Es una **modificación opcional**: puedes dejar el **HUD original** del juego (OFF, como viene) o usar el **moderno** (ON), y cambiar entre los dos cuando quieras.
+Es una **modificación opcional**: viene **encendido** (ON), y si prefieres el **HUD original** del juego lo pones en OFF. Puedes cambiar entre los dos cuando quieras.
 
 ![TRUCOS > HUD: ESTILO](capturas/hud_moderno_opcion.jpg)
 
@@ -223,7 +237,7 @@ El rombo rojo del borde del radar **apunta hacia tu objetivo**: el mismo lugar q
 | **RADAR CON BARRIDO** | Un barrido que gira sobre el radar, una vuelta cada tres segundos: verde azulado sobre el radar redondo, azul en los demás. Con el HUD original y sin el radar redondo, también dibuja una cruz y dos anillos. OFF: sin barrido |
 | **RADAR HORIZONTAL / VERTICAL** (y FINO) | Moverlo de lugar, como las demás partes del HUD (o con el dedo en el editor) |
 
-Para tener el **radar original del juego, tal cual**: RADAR REDONDO OFF, RADAR CON BARRIDO OFF y, en HUD: ESTILO, HUD MODERNO OFF.
+Para tener el **radar original del juego, tal cual**: RADAR REDONDO OFF, RADAR CON BARRIDO OFF y, en HUD: ESTILO, HUD MODERNO OFF (viene en ON).
 
 ### Gráficos
 En **TRUCOS > GRAFICOS**, para que el juego se vea más moderno sin cambiar su estilo. Lo más fácil: **PRESET: MEJORADOS**, que pone todo de una vez.
@@ -299,6 +313,9 @@ Si una compilación falla (por ejemplo, porque una versión nueva de OpenCE camb
 ### Versiones de prueba
 Los cambios nuevos se prueban primero en la rama **`pruebas`**. Lo que se compila desde ahí es **privado**: sale en **Releases** como **borrador (Draft)**, que solo ve el dueño del repositorio, y es **otra app** ("Halo PRUEBA", paquete `com.halo.decomp.pruebas`) que se instala al lado de la normal sin reemplazarla. Tiene su propia carpeta para los archivos del juego y las partidas. Cuando la prueba sale bien, el cambio pasa a la rama `main`.
 
+### Versión con GOAT H1 (en pruebas)
+En la rama **`pruebas-goat`** se arma otra versión: los mismos trucos sobre **[GOAT H1 (OpenH1)](https://github.com/OpenH1/goath1)**, otro port de Halo CE para Android, con sus controles táctiles, su soporte de control y su renderizado Vulkan. Sale en **Releases** como borrador **"GOAT PRUEBA"** (paquete `com.openh1.openh1.trucos.pruebas`), se instala al lado de las otras y tiene la pestaña **TRUCOS** dentro de sus ajustes. Se está pasando **todo al español**: los menús y ajustes ya están; faltan los títulos dibujados, los botones del menú principal y los controles táctiles. Lo que cambia frente a esta versión está en el [README de esa rama](https://github.com/freedsny/Halo-CE-Android-Trucos-Mods-OpenCE/tree/pruebas-goat#readme).
+
 ## Cómo está hecho este repositorio
 
 Este repositorio **no es un fork** del código de OpenCE: solo guarda los cambios.
@@ -322,5 +339,6 @@ Si OpenCE cambia las partes que toca el parche, la compilación puede fallar en 
 
 - **OpenCE** y todo el código del juego: [OpenCommunityEdition/OpenCE](https://github.com/OpenCommunityEdition/OpenCE), bajo la licencia **GNU AGPL v3**. Los cambios de este repositorio se comparten bajo esa misma licencia (ver [LICENSE](LICENSE)).
 - Trucos (armas y vehículos a elección, sobrescudo infinito, linterna, teletransporte y más), menús en español, flecha guía, HUD movible, HUD moderno, radar redondo y compilación automática: **freddVelp** ([@freedsny](https://github.com/freedsny)).
+- **GOAT H1**, de la versión en pruebas: [OpenH1/goath1](https://github.com/OpenH1/goath1), bajo la licencia **GNU AGPL v3**.
 - La flecha de objetivo usa solo los nombres de los scripts de cada misión como referencia; no incluye scripts ni datos del juego.
 - Halo: Combat Evolved © Microsoft Corporation.
