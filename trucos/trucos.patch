@@ -725,7 +725,7 @@
 +		"markers, with the distance in meters: \"off\", \"ally\" (the nearest ally),\n"
 +		"\"enemy\" (the nearest enemy), \"objective\" (where the campaign level waits\n"
 +		"for the player to go next) or \"auto\" (the objective; else the enemies the\n"
-+		"level waits to die, with how many are left; a weapon when the player's are\n"
++		"level waits to die, with how many are left; a weapon when the one in hand is\n"
 +		"empty; else the nearest enemy)." },
 +	{ "hud.shield_x", _config_integer, "0", "HALO_HUD_SHIELD_X", _environment_value, _platform_all,
 +		"Moves the shield part of the HUD, in HUD units (the tags' 640x480): positive\n"
@@ -3384,7 +3384,7 @@
  			}
  		}
  	}
-@@ -810,6 +878,1516 @@
+@@ -810,6 +878,1511 @@
  	return;
  }
  
@@ -3558,26 +3558,21 @@
 +	return empty;
 +}
 +
-+/* whether every weapon the player carries is empty (and carries one) */
++/* whether the weapon in the player's hand is empty (the arrow shows one to
++take instead; none in the hand: not) */
 +static boolean hud_port_guide_out_of_ammo(
 +	long unit_index)
 +{
 +	struct unit_datum *unit = unit_get(unit_index);
-+	short weapon_slot, carried = 0;
++	short weapon_slot = unit->unit.current_weapon_index;
++	long weapon_index;
 +
-+	for (weapon_slot = 0; weapon_slot<MAXIMUM_WEAPONS_PER_UNIT; weapon_slot++)
-+	{
-+		long weapon_index = unit->unit.weapon_object_indices[weapon_slot];
++	if (weapon_slot<0 || weapon_slot>=MAXIMUM_WEAPONS_PER_UNIT)
++		return FALSE;
++	weapon_index = unit->unit.weapon_object_indices[weapon_slot];
 +
-+		if (weapon_index!=NONE && object_try_and_get_and_verify_type(weapon_index, _object_mask_weapon))
-+		{
-+			carried++;
-+			if (!hud_port_guide_weapon_empty(weapon_index))
-+				return FALSE;
-+		}
-+	}
-+
-+	return carried>0;
++	return weapon_index!=NONE && object_try_and_get_and_verify_type(weapon_index, _object_mask_weapon) &&
++		hud_port_guide_weapon_empty(weapon_index);
 +}
 +
 +/* the nearest weapon on the ground with rounds in it */
@@ -3652,7 +3647,7 @@
 +		return FALSE;
 +
 +	object_get_origin(unit_index, &origin);
-+	/* AUTO: with every weapon empty, a weapon first */
++	/* AUTO: with the weapon in hand empty, a weapon first */
 +	if (mode==4 && hud_port_guide_out_of_ammo(unit_index) &&
 +		hud_port_guide_nearest_weapon(unit_index, target, target_object_index))
 +	{
@@ -3728,7 +3723,7 @@
 +		if ((mode!=logged_mode || hud_port_guide_kind!=logged_kind) && lines<200)
 +		{
 +			static char const *const kinds[] =
-+				{ "nothing", "the objective's place", "the enemies the level waits to die", "a weapon (the player's are empty)",
++				{ "nothing", "the objective's place", "the enemies the level waits to die", "a weapon (the one in hand is empty)",
 +				"the nearest enemy", "the nearest ally" };
 +			static char const *const modes[] = { "off", "ally", "enemy", "objective", "auto" };
 +
@@ -4901,7 +4896,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -905,6 +2483,8 @@
+@@ -905,6 +2478,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -4910,7 +4905,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1023,3 +2603,236 @@
+@@ -1023,3 +2598,236 @@
  
  	return;
  }
