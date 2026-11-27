@@ -570,7 +570,7 @@
  /* (a text field: Settings' sliders' numbers, below) */
  static boolean text_field_editing(struct widget_instance *row);
  static void text_field_end(boolean keep);
-@@ -2010,9 +2011,65 @@
+@@ -2010,6 +2011,61 @@
  	return TRUE;
  }
  
@@ -631,20 +631,8 @@
 +
  /* the difficulty menu: "difficulty item select" starts the game at the
  item's; "set difficulty" (its OK button) at the one its description shows */
--static boolean difficulty_start(short difficulty, short controller)
-+static boolean difficulty_start(struct widget_instance *widget, short difficulty, short controller,
-+	boolean *widget_deleted)
- {
- 	struct player_profile profile;
- 	char const *map_name = main_get_map_name();
-@@ -2027,10 +2084,31 @@
- 	/* (a campaign level, or a Custom Edition campaign map) */
- 	if (!custom_edition_maps_level_campaign(map_name))
- 		map_name = main_get_solo_level_name(0);
-+	/* port (trucos): ARMAS AL EMPEZAR's screen first */
-+	if (trucos_armas_screen_open(widget, map_name, PIN(difficulty, 0, 3), controller, widget_deleted))
-+		return TRUE;
- 	campaign_start(map_name, PIN(difficulty, 0, 3), controller);
+ static boolean difficulty_start(short difficulty, short controller)
+@@ -2031,6 +2087,24 @@
  	return TRUE;
  }
  
@@ -669,13 +657,7 @@
  static short difficulty_shown(struct widget_instance *widget)
  {
  	for (; widget; widget = widget->parent)
-@@ -17243,11 +17321,18 @@
- 		}
- 		else if (!strcmp(name, "difficulty item select"))
- 		{
--			return difficulty_start(sibling_index(widget), controller);
-+			return difficulty_start(widget, sibling_index(widget), controller, widget_deleted);
- 		}
+@@ -17248,6 +17322,13 @@
  		else if (!strcmp(name, "set difficulty"))
  		{
  			main_set_difficulty(PIN(difficulty_shown(widget), 0, 3));
@@ -729,7 +711,7 @@
  	direct = &direct_cameras[local_player_index];
 --- /dev/null
 +++ b/port/linux/game/tag_import.c
-@@ -0,0 +1,2751 @@
+@@ -0,0 +1,2739 @@
 +/*
 +TAG_IMPORT.C
 +
@@ -938,20 +920,8 @@
 +	struct held_block *next;
 +};
 +
-+/* the loaded map's tag, as cache_files.c has it. The semantics header only
-+names it (menu_tags.c defines it the same way) */
-+struct cache_file_tag_instance
-+{
-+	long group_tag;
-+	long parent_group_tags[2];
-+	long tag_index;
-+	char *name;
-+	void *base_address;
-+	unsigned long unused[2];
-+};
++/* (the loaded map's tag: struct cache_file_tag_instance, tag_groups.h's in GOAT H1) */
 +
-+typedef char tag_import_tag_table_size[
-+	sizeof(struct cache_file_tag_instance) == 0x20 ? 1 : -1];
 +
 +/* a pack, read (tag_pack.h): its manifest's name, and what it holds */
 +struct pack
@@ -5799,7 +5769,7 @@
 +#endif
 --- /dev/null
 +++ b/port/linux/game/trucos_armas.c
-@@ -0,0 +1,622 @@
+@@ -0,0 +1,612 @@
 +/*
 +TRUCOS_ARMAS.C
 +
@@ -5847,17 +5817,7 @@
 +
 +extern void *cache_files_tag_instances(long *count);
 +
-+/* the loaded map's tag, as cache_files.c has it (tag_import.c and
-+menu_tags.c define it the same way) */
-+struct cache_file_tag_instance
-+{
-+	long group_tag;
-+	long parent_group_tags[2];
-+	long tag_index;
-+	char *name;
-+	void *base_address;
-+	unsigned long unused[2];
-+};
++/* (the loaded map's tag: struct cache_file_tag_instance, tag_groups.h's in GOAT H1) */
 +extern int config_boolean(char const *name);
 +extern char const *config_string(char const *name);
 +extern void platform_log(char const *format, ...);
@@ -10637,7 +10597,7 @@
  	struct hud_absolute_placement_definition const *absolute_placement,
 --- a/source/interface/hud_nav_points.c
 +++ b/source/interface/hud_nav_points.c
-@@ -102,6 +102,7 @@
+@@ -102,9 +102,11 @@
  #include "cseries/cseries.h"
  #include "cseries/errors.h"
  #include "game_state.h"
@@ -10645,7 +10605,11 @@
  #include "game/game_engine.h"
  #include "game/players.h"
  #include "networking/network_connection.h"
-@@ -118,6 +119,14 @@
++#include "networking/network_game_globals.h" /* port: the guide arrow's Ir (network_game_distributed_client) */
+ #include "memory/data.h"
+ #include "physics/collisions.h"
+ #include "physics/collision_usage.h"
+@@ -118,6 +120,14 @@
  #include "interface/hud_definitions.h"
  #include "bitmaps/bitmap_color_conversion.h"
  #include "interface/hud_draw.h"
@@ -10660,7 +10624,7 @@
  #include "objects/object_types.h"
  #include "render/render.h"
  #include "render/render_cameras_internal.h"
-@@ -133,6 +142,15 @@
+@@ -133,6 +143,15 @@
  boolean vr_render_world_waypoint(real_point3d const *point, boolean on_screen, real x, real y);
  #endif
  #include "mcc_campaign.h" /* port: port/linux/game/mcc_campaign.c */
@@ -10676,7 +10640,7 @@
  
  /* ---------- constants */
  
-@@ -698,6 +716,17 @@
+@@ -698,6 +717,17 @@
  	return render_type;
  }
  
@@ -10694,7 +10658,7 @@
  void custom_render_nav_point(
  	short local_player_index,
  	real_point3d const *position_pointer,
-@@ -729,6 +758,10 @@
+@@ -729,6 +759,10 @@
  		render_interpolation_unit_camera_position(local_player_get_player_index(local_player_index) == NONE ? NONE : player_get(local_player_get_player_index(local_player_index))->unit_index, &cam_pos);
  		distance = distance3d(&cam_pos, position_pointer);
  	}
@@ -10705,7 +10669,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -811,7 +844,7 @@
+@@ -811,7 +845,7 @@
  
  			scale *= mcc_hud_bitmap_scale(bitmap_index); /* port: preserve MCC waypoint bitmap scaling. */
  			alpha = PIN(255 * fast_ftol_C(arrow->opacity), 0, 255);
@@ -10714,7 +10678,7 @@
  			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
-@@ -857,6 +890,41 @@
+@@ -857,6 +891,41 @@
  				hud_draw_numbers(local_player_index, &placement, &numbers,
  					(short)MIN(tenths / 10, SHORT_MAX), (short)(tenths % 10 * 1000),
  					0, 0, 0.f);
@@ -10756,7 +10720,7 @@
  			}
  		}
  	}
-@@ -976,6 +1044,1556 @@
+@@ -976,6 +1045,1557 @@
  	return TRUE;
  }
  
@@ -10769,6 +10733,7 @@
 +long config_integer(const char *name);
 +const char *config_string(const char *name);
 +unsigned long config_changes(void);
++int config_boolean(const char *name);
 +short hs_port_guide_find_target(real_point3d const *player, real_point3d *target, boolean ai_waits);
 +void hs_port_guide_get_target_center(real_point3d *center);
 +short hs_port_guide_get_target_order(void);
@@ -12313,7 +12278,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -1075,6 +2693,8 @@
+@@ -1075,6 +2695,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -12322,7 +12287,7 @@
  	}
  
  	/* port: the players' pings (port/linux/game/network_markers.c) */
-@@ -1195,3 +2815,236 @@
+@@ -1195,3 +2817,236 @@
  
  	return;
  }
