@@ -109,4 +109,58 @@ if '"guide.mode", {' not in fuente_c:
     i += len(punto)
     config_c.write_text(fuente_c[:i] + palabras + fuente_c[i:], encoding="utf-8", newline="")
 
+
+# 6) todo en espanol: cada texto que se ve en los menus (de GOAT H1 y del juego), con
+# trucos/es/menus.json (ingles -> espanol, sin tildes ni enes: la fuente del juego).
+# Si un texto que se ve no esta traducido (GOAT H1 agrego uno), se detiene y lo dice
+import html
+import re
+
+traducciones = json.loads((aqui / "es" / "menus.json").read_text(encoding="utf-8"))
+ya_espanol = set(traducciones.values())
+ENTEROS = ("text", "help", "title", "label")      # un texto entero
+LISTAS = ("strings", "items", "shown")            # palabras separadas por |
+RUTAS = ("crumb",)                                 # partes separadas por " › "
+TILDES = re.compile(r"[áéíóúÁÉÍÓÚñÑ¿¡]")
+sin_traducir = {}
+
+
+def traducir_texto(texto, archivo):
+    if texto in traducciones:
+        return traducciones[texto]
+    if texto in ya_espanol or not re.search(r"[A-Za-z]", html.unescape(texto)):
+        return texto
+    sin_traducir.setdefault(texto, archivo)
+    return texto
+
+
+def traducir_atributo(m, archivo):
+    nombre, valor = m.group(1), m.group(2)
+    if nombre in ENTEROS:
+        nuevo = traducir_texto(valor, archivo)
+    elif nombre in LISTAS:
+        nuevo = "|".join(traducir_texto(v, archivo) for v in valor.split("|"))
+    else:
+        nuevo = " › ".join(traducir_texto(v, archivo) for v in valor.split(" › "))
+    return f' {nombre}="{nuevo}"'
+
+
+patron = re.compile(r' (' + "|".join(ENTEROS + LISTAS + RUTAS) + r')="([^"]*)"')
+cambiados = 0
+for ruta in sorted(list(ce.glob("*.xml")) + list((menus / "model").rglob("*.xml"))):
+    if ruta.name == "bitmaps.xml":
+        continue
+    contenido = ruta.read_text(encoding="utf-8")
+    nuevo = patron.sub(lambda m: traducir_atributo(m, ruta.name), contenido)
+    if nuevo != contenido:
+        ruta.write_text(nuevo, encoding="utf-8", newline="")
+        cambiados += 1
+malos = [t for t in traducciones.values() if TILDES.search(t)]
+if malos:
+    falla("traducciones con tildes o enes (la fuente del juego no las tiene): " + "; ".join(malos[:5]))
+if sin_traducir:
+    falla(f"{len(sin_traducir)} textos de los menus sin traducir (agregarlos a trucos/es/menus.json): " +
+          "; ".join(f"{t!r} ({a})" for t, a in list(sin_traducir.items())[:15]))
+print("menus en espanol:", cambiados, "archivos")
+
 print("TRUCOS en GOAT H1:", len(paginas), "paginas,", len(nuevos), "archivos de menu nuevos,", len(pngs), "titulos")
