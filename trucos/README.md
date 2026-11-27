@@ -1,15 +1,15 @@
-# Carpeta `trucos/`
+# Carpeta `trucos/` (rama `pruebas-goat`)
 
-Aquí están los cambios que se le aplican al código oficial de [OpenCE](https://github.com/OpenCommunityEdition/OpenCE) para compilar **Halo C.E con trucos**.
+Aquí están los cambios que se le aplican al código de [GOAT H1](https://github.com/OpenH1/goath1) para compilar **Halo C.E con trucos sobre GOAT H1** (GOAT PRUEBA).
 
 | Archivo | Para qué sirve |
 |---|---|
-| `trucos.patch` | Los cambios al código de OpenCE: trucos, flecha guía, HUD movible, HUD moderno, radar redondo y menús |
-| `regenerar_menus.py` | Genera las pantallas del menú, las registra y las pasa al español |
-| `textos_es.py` | Los textos en español de los menús |
-| `menu_es.py` | Dibuja en español las palabras del menú principal y los títulos |
+| `trucos.patch` | Los cambios al código de GOAT H1: trucos, flecha guía, HUD movible, HUD moderno, radar redondo, la pestaña TRUCOS y los controles táctiles |
+| `regenerar_menus.py` | Genera los menús de GOAT H1 con la pestaña TRUCOS, registra sus títulos y pasa todos los menús al español |
+| `es/menus.json` | Las traducciones de los menús de GOAT H1: cada texto en inglés y su texto en español (sin tildes ni eñes) |
 | `header_*.png` | Los títulos TRUCOS, HUD, AJUSTES y GUIA |
+| `textos_es.py`, `menu_es.py` | Copias de la versión con OpenCE; esta rama todavía no los usa (`menu_es.py` servirá para dibujar los títulos en español) |
 
-El workflow `.github/workflows/build-android.yml` descarga OpenCE, aplica `trucos.patch`, ejecuta `regenerar_menus.py` y compila el APK.
+El workflow `.github/workflows/build-goat.yml` descarga GOAT H1, aplica `trucos.patch`, ejecuta `regenerar_menus.py` y compila el APK.
 
-**Todo lo que hace cada truco y cada opción está en el [README principal](../README.md).**
+**Qué tiene esta versión está en el [README de la rama](../README.md).**
