@@ -775,10 +775,10 @@
 +	{ "hud.radar_fy", _config_integer, "0", "HALO_HUD_RADAR_FY", _environment_value, _platform_all,
 +		"The fine adjustment of hud.radar_y, added to it: so 625 is 600 and 25.\n"
 +		"In HUD units (the tags' 640x480). 0: none." },
-+	{ "hud.modern", _config_boolean, "false", "HALO_HUD_MODERN", _environment_value, _platform_all,
++	{ "hud.modern", _config_boolean, "true", "HALO_HUD_MODERN", _environment_value, _platform_all,
 +		"The modern HUD (pause menu, SETTINGS, TRUCOS, HUD: ESTILO): the shield and the\n"
 +		"health as long bars at the top middle and the radar in an eight-sided panel\n"
-+		"with rings. false: the maps' own." },
++		"with rings (on by default). false: the maps' own." },
 +	{ "hud.radar_sweep", _config_boolean, "true", "HALO_HUD_RADAR_SWEEP", _environment_value, _platform_all,
 +		"Draws a turning sweep, a cross and rings over the radar (pause menu,\n"
 +		"SETTINGS, TRUCOS, HUD: RADAR). false: the maps' radar alone." },
@@ -3315,8 +3315,8 @@
 +blue of the scripts' markers is lost in the many blue levels); 0, the arrow's */
 +#define HUD_PORT_GUIDE_COLOR 0x00FF9020
 +static pixel32 hud_port_nav_color_override = 0;
-+/* port: and the lines under its meters (SUBE / BAJA, QUEDAN 3, what to do),
-+in the HUD's font, when it is on the screen; NULL: none */
++/* port: and the lines under its meters (SUBE / BAJA, QUEDAN 3, SIN BALAS), in
++the HUD's font, when it is on the screen; NULL: none */
 +static wchar_t const *hud_port_nav_label = NULL;
 +
  void custom_render_nav_point(
@@ -3384,7 +3384,7 @@
  			}
  		}
  	}
-@@ -810,6 +878,1511 @@
+@@ -810,6 +878,1556 @@
  	return;
  }
  
@@ -4712,12 +4712,11 @@
 +
 +/* port: the guide arrow's lines (custom_render_nav_point draws them under it):
 +SUBE or BAJA when the target is on another floor near enough, how many of the
-+step's enemies are left, a weapon for empty ones, and what to do at the step;
-+what to do also goes to the HUD's messages when it changes. What to do is not
-+always there, it is in the way: a while when it changes or the arrow comes back
-+(after a cutscene, a load, the pause), then a little every few minutes */
++step's enemies are left, a weapon for empty ones; and what to do at the step,
++for the corner (hud_port_guide_draw_objective). What to do is not always there:
++a while when it changes or the arrow comes back (after a cutscene, a load, the
++pause), then a little every few minutes */
 +#define GUIDE_FLOOR_HEIGHT 1.2f /* (world units: a floor is about 3 meters) */
-+#define GUIDE_TEXT_MESSAGE_MILLISECONDS 10000
 +#define GUIDE_TEXT_FIRST_MILLISECONDS 8000 /* (when it changes or comes back) */
 +#define GUIDE_TEXT_AGAIN_MILLISECONDS 120000 /* (then every this long, ...) */
 +#define GUIDE_TEXT_AGAIN_SHOWN_MILLISECONDS 6000 /* (... this long) */
@@ -4728,10 +4727,10 @@
 +	long unit_index,
 +	real_point3d const *target,
 +	wchar_t *label,
-+	short label_size)
++	short label_size,
++	wchar_t *objective,
++	short objective_size)
 +{
-+	static char const *printed_text = NULL;
-+	static unsigned long printed_at = 0;
 +	static char const *shown_text = NULL;
 +	static unsigned long shown_since = 0, last_drawn = 0;
 +	unsigned long now = system_milliseconds();
@@ -4753,6 +4752,7 @@
 +	horizontal = square_root((target->x-origin.x)*(target->x-origin.x)+(target->y-origin.y)*(target->y-origin.y));
 +
 +	label[0] = 0;
++	objective[0] = 0;
 +#define GUIDE_LINE(...) \
 +	if (length<label_size-1) \
 +	{ \
@@ -4791,23 +4791,65 @@
 +		if (now-shown_since<GUIDE_TEXT_FIRST_MILLISECONDS ||
 +			(now-shown_since)%GUIDE_TEXT_AGAIN_MILLISECONDS<GUIDE_TEXT_AGAIN_SHOWN_MILLISECONDS)
 +		{
-+			GUIDE_LINE(L"%ls", text);
-+		}
-+
-+		if (hud_port_guide_text!=printed_text &&
-+			(!printed_at || system_milliseconds()-printed_at>=GUIDE_TEXT_MESSAGE_MILLISECONDS))
-+		{
-+			wchar_t message[80];
-+
-+			usnprintf(message, NUMBEROF(message)-1, L"OBJETIVO: %ls", text);
-+			message[NUMBEROF(message)-1] = 0;
-+			hud_print_message(local_player_index, message);
-+			printed_text = hud_port_guide_text;
-+			printed_at = system_milliseconds();
++			ustrncpy(objective, text, objective_size-1);
++			objective[objective_size-1] = 0;
 +		}
 +	}
 +	last_drawn = now;
 +#undef GUIDE_LINE
++
++	return;
++}
++
++/* port: what to do at the step, in the left corner under the HUD's messages:
++OBJETIVO and the text, with a shadow */
++static void hud_port_guide_draw_objective(
++	short local_player_index,
++	wchar_t const *objective)
++{
++	static wchar_t const heading[] = L"OBJETIVO";
++	long font_index = hud_get_font_index();
++	struct font_header *font;
++	short line_height, width;
++	point2d messages;
++	rectangle2d bounds;
++	real_argb_color heading_color, text_color, shadow_color;
++
++	if (!objective[0] || !hud_globals || font_index==NONE)
++		return;
++
++	font = font_definition_get(font_index);
++	line_height = font->leading_height + font->ascending_height + font->descending_height;
++	width = (short)((render.camera.viewport_bounds.x1 - render.camera.viewport_bounds.x0) * 0.4f);
++	/* (where the HUD's messages start, three lines under it: room for them) */
++	hud_calculate_point(local_player_index, &hud_globals->messaging.absolute_placement,
++		&hud_globals->messaging.placement, NULL, local_player_count()>1, 0.f, &messages);
++
++	heading_color.alpha = text_color.alpha = shadow_color.alpha = 1.f;
++	pixel32_to_real_rgb_color(HUD_PORT_GUIDE_COLOR, &heading_color.rgb);
++	text_color.rgb.red = text_color.rgb.green = text_color.rgb.blue = 0.92f;
++	shadow_color.rgb.red = shadow_color.rgb.green = shadow_color.rgb.blue = 0.f;
++
++	bounds.x0 = messages.x;
++	bounds.x1 = messages.x + width;
++	bounds.y0 = messages.y + 3 * line_height;
++	bounds.y1 = bounds.y0 + line_height;
++	/* (the shadow one point down and right, then the text) */
++	bounds.x0++; bounds.x1++; bounds.y0++; bounds.y1++;
++	draw_string_set_draw_mode(font_index, NONE, 0, 0, &shadow_color); /* (0: left) */
++	rasterizer_draw_unicode_string(&bounds, NULL, NULL, 0, heading);
++	bounds.x0--; bounds.x1--; bounds.y0--; bounds.y1--;
++	draw_string_set_draw_mode(font_index, NONE, 0, 0, &heading_color);
++	rasterizer_draw_unicode_string(&bounds, NULL, NULL, 0, heading);
++
++	bounds.y0 += line_height;
++	bounds.y1 = bounds.y0 + 2 * line_height;
++	bounds.x0++; bounds.x1++; bounds.y0++; bounds.y1++;
++	draw_string_set_draw_mode(font_index, NONE, 0, 0, &shadow_color);
++	rasterizer_draw_unicode_string(&bounds, NULL, NULL, 0, objective);
++	bounds.x0--; bounds.x1--; bounds.y0--; bounds.y1--;
++	draw_string_set_draw_mode(font_index, NONE, 0, 0, &text_color);
++	rasterizer_draw_unicode_string(&bounds, NULL, NULL, 0, objective);
 +
 +	return;
 +}
@@ -4833,6 +4875,7 @@
 +		real_point3d point;
 +		long point_object_index;
 +		wchar_t label[160];
++		wchar_t objective[64];
 +
 +		unit_get_head_position(unit_index, &head_position);
 +		hud_port_guide_route_point(local_player_index, unit_index, &target, target_object_index, &point);
@@ -4871,7 +4914,8 @@
 +			hud_port_guide_kind==_hud_port_guide_step_enemy || hud_port_guide_kind==_hud_port_guide_enemy ? 0x00FF4030 :
 +			hud_port_guide_kind==_hud_port_guide_weapon ? 0x0040FF60 :
 +			HUD_PORT_GUIDE_COLOR;
-+		hud_port_guide_lines(local_player_index, unit_index, &target, label, NUMBEROF(label));
++		hud_port_guide_lines(local_player_index, unit_index, &target, label, NUMBEROF(label),
++			objective, NUMBEROF(objective));
 +		hud_port_nav_label = label;
 +		custom_render_nav_point(
 +			local_player_index,
@@ -4884,6 +4928,7 @@
 +		hud_port_nav_distance_override = -1.f;
 +		hud_port_nav_color_override = 0;
 +		hud_port_nav_label = NULL;
++		hud_port_guide_draw_objective(local_player_index, objective);
 +		/* (the Ir button only for a target in the part of the level that is
 +		loaded: one in another part, or outside the level, cannot be gone to) */
 +		if (hud_port_guide_target_reachable(&target))
@@ -4896,7 +4941,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -905,6 +2478,8 @@
+@@ -905,6 +2523,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -4905,7 +4950,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1023,3 +2598,236 @@
+@@ -1023,3 +2643,236 @@
  
  	return;
  }
