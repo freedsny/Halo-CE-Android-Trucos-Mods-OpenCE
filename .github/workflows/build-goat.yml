@@ -136,6 +136,8 @@ jobs:
         working-directory: src
         env:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          # (la llave de siempre se llama como en OpenCE; GOAT H1 busca "openh1")
+          HALO_ANDROID_KEY_ALIAS: halo
         run: env -u GITHUB_REF -u CI_BUILD_NUMBER python3 tools/ci_build.py android release
 
       - name: Compile cache
