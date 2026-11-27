@@ -5167,8 +5167,7 @@
 +	short ai_functions[5];
 +	short level; /* the route's place in hs_port_guide_routes: the level */
 +	short target_order; /* the step of the last place, NONE: none */
-+	/* (AUTO) the AI the steps from the furthest place on wait to die, and
-+	their steps */
++	/* (AUTO) the AI the waiting steps wait to die, and their steps */
 +	short ai_count;
 +	long ai_references[HS_PORT_GUIDE_MAXIMUM_AI];
 +	short ai_orders[HS_PORT_GUIDE_MAXIMUM_AI];
@@ -5740,9 +5739,8 @@
 +}
 +
 +/* what the level waits for: _hs_port_guide_place (target is where) or
-+_hs_port_guide_nothing; with ai_waits, also the AI the steps from the furthest
-+place on wait to die (hs_port_guide_get_ai_waits: AUTO points at them when
-+they are near) */
++_hs_port_guide_nothing; with ai_waits, also the AI the waiting steps wait to die
++(hs_port_guide_get_ai_waits: AUTO points at them when they are near) */
 +enum
 +{
 +	_hs_port_guide_nothing = 0,
@@ -5826,12 +5824,14 @@
 +
 +			if (thread->sleep_until>=0 && valid_thread(thread))
 +			{
++				/* (the enemies of every step that waits: a part's main script waits
++				for its fight while the player is already in the volumes of the part's
++				later steps, Halo's first lifepod) */
++				if (ai_waits)
++					hs_port_guide_thread_ai(thread, order);
 +				if (order>=hs_port_guide.progress)
 +				{
 +					real_point3d candidate, center;
-+
-+					if (ai_waits)
-+						hs_port_guide_thread_ai(thread, order);
 +
 +					if (hs_port_guide_thread_target(thread, player, &candidate, &center))
 +					{
@@ -5882,7 +5882,7 @@
 +	return hs_port_guide.target_order;
 +}
 +
-+/* the AI the steps from the furthest place on wait to die, found by the last
++/* the AI the waiting steps wait to die, found by the last
 +hs_port_guide_find_target with ai_waits, and their steps */
 +short hs_port_guide_get_ai_waits(
 +	long const **references,
