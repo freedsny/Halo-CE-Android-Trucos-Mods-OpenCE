@@ -1,3 +1,12 @@
+# Rama `pruebas-goat`: Halo C.E con trucos sobre GOAT H1 (PRUEBA)
+
+Esta rama no es OpenCE: es la misma idea sobre GOAT H1 (https://github.com/OpenH1/goath1, tags `build-N`, AGPL-3.0 como OpenCE). Nunca se mezcla con `main` ni con `pruebas` mientras Freed no decida cambiar de base.
+
+- `trucos/trucos.patch` es el parche para GOAT H1; `trucos/regenerar_menus.py` es el de GOAT H1: genera los menús con `tools/port_settings.py` de GOAT (pestaña TRUCOS), registra las páginas y sus títulos (`trucos/header_*.png`) y pone las palabras de `guide.mode`. Los menús propios de GOAT siguen en inglés.
+- `.github/workflows/build-goat.yml` compila al subir a esta rama: borrador privado `GOAT PRUEBA - GOAT H1 build-N (#n)`, paquete `com.openh1.openh1.trucos.pruebas`, app "GOAT PRUEBA". Si falla no abre aviso (el de OpenCE pausaría a su vigilante). Esta rama no tiene vigilante.
+- Fuera de esta primera versión: GRAFICOS (GOAT tiene sus propios gráficos: el código de OpenCE que tocaba, `d3d8_gl.c` y `xgpu_post.c`, no existe en GOAT) y la pantalla de ARMAS AL EMPEZAR.
+- Para rehacer el parche sobre una versión nueva de GOAT: lo mismo que abajo, con `OpenH1/goath1` en vez de OpenCE y `regenerar_menus.py` de esta rama.
+
 # Notas para Claude: cómo arreglar la compilación de Halo C.E con trucos (OpenCE)
 
 ## Cómo funciona

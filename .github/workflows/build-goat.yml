@@ -1,0 +1,170 @@
+name: Compilar GOAT H1 con trucos (PRUEBA)
+
+# Rama pruebas-goat: Halo C.E con trucos sobre GOAT H1 (OpenH1/goath1) en vez de
+# OpenCE. Baja el codigo de GOAT H1 (la ultima version), le aplica
+# trucos/trucos.patch, genera los menus con la pestana TRUCOS
+# (trucos/regenerar_menus.py), compila el APK y lo deja como borrador privado.
+# Es otra app: com.openh1.openh1.trucos.pruebas ("GOAT PRUEBA"), al lado de las
+# demas. Los pasos de compilacion son los del workflow oficial de GOAT H1.
+# Si falla no abre ningun aviso: el aviso de OpenCE pausaria a su vigilante.
+
+on:
+  push:
+    branches: [pruebas-goat]
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version de GOAT H1 (ej. build-2552). Vacio = la ultima"
+        required: false
+        default: ""
+
+concurrency:
+  group: goat-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CI_COMPILER_LAUNCHER: ccache
+  CCACHE_DIR: ${{ github.workspace }}/src/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}/src
+  CCACHE_MAXSIZE: 1G
+
+jobs:
+  android:
+    # La imagen del runner trae el SDK y el NDK de Android, un JDK y CMake; el
+    # compilador del juego lo baja configure.py.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Install the toolchain
+        run: |
+          mkdir -p "$RUNNER_TEMP/tools"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o ccache.tar.xz https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
+          sha256sum -c - <<'HASHES'
+          6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  ninja.zip
+          80cab87bd510eca796467aee8e663c398239e0df1c4800a0b5dff11dca0b4f18  ccache.tar.xz
+          HASHES
+          unzip -q ninja.zip -d "$RUNNER_TEMP/tools" && rm ninja.zip
+          tar -xJf ccache.tar.xz -C "$RUNNER_TEMP/tools" --strip-components=1 ccache-4.10.2-linux-x86_64/ccache && rm ccache.tar.xz
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+
+      - name: Buscar la ultima version de GOAT H1
+        id: version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          ver="$VERSION"
+          if [ -z "$ver" ]; then
+            ver=$(git ls-remote --tags --refs https://github.com/OpenH1/goath1.git 'build-*' | sed 's#.*refs/tags/##' | sort -V | tail -1)
+          fi
+          echo "Version de GOAT H1: $ver"
+          echo "ref=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Este repositorio (parche y script)
+        uses: actions/checkout@v4
+        with:
+          path: repo
+
+      - name: Codigo de GOAT H1 (la version elegida)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenH1/goath1
+          ref: ${{ steps.version.outputs.ref }}
+          path: src
+
+      - name: Aplicar los trucos
+        working-directory: src
+        run: |
+          patch -p1 -l < ../repo/trucos/trucos.patch
+          /usr/bin/python3 ../repo/trucos/regenerar_menus.py
+          # Otra app, al lado de GOAT H1 y de las demas: su propio paquete, su
+          # nombre y sus accesos directos (el proveedor de actualizaciones va con
+          # el paquete: ${applicationId}.update)
+          sed -i 's#applicationId "com.openh1.openh1"#applicationId "com.openh1.openh1.trucos.pruebas"#' port/android/app/build.gradle
+          sed -i 's#android:targetPackage="com.openh1.openh1"#android:targetPackage="com.openh1.openh1.trucos.pruebas"#g' port/android/app/src/main/res/xml/shortcuts.xml
+          sed -i 's#<string name="app_name">GOAT H1</string>#<string name="app_name">GOAT PRUEBA</string>#' port/android/app/src/main/res/values/strings.xml
+          grep -n 'applicationId' port/android/app/build.gradle
+          grep -n 'targetPackage' port/android/app/src/main/res/xml/shortcuts.xml
+          grep -n 'app_name' port/android/app/src/main/res/values/strings.xml
+          grep -q 'applicationId "com.openh1.openh1.trucos.pruebas"' port/android/app/build.gradle
+          grep -q 'GOAT PRUEBA' port/android/app/src/main/res/values/strings.xml
+
+      - uses: actions/cache@v4
+        with:
+          path: src/.ccache
+          key: ccache-goat-android-${{ github.sha }}
+          restore-keys: ccache-goat-android-
+
+      - uses: actions/cache@v4
+        with:
+          path: src/build/android/third_party
+          key: goat-android-third-party-${{ hashFiles('src/tools/android_build.py', 'src/tools/ffmpeg_fetch.py', 'src/port/third_party/ffmpeg/sources.txt', 'src/port/android/patches/**') }}
+
+      - uses: actions/cache@v4
+        with:
+          path: src/.cache/llvm
+          key: goat-guest-llvm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/tools/guest_toolchain.py') }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: goat-gradle-${{ hashFiles('src/port/android/**/*.gradle*', 'src/port/android/gradle/wrapper/gradle-wrapper.properties') }}
+
+      # La llave de firma de siempre (secretos ANDROID_KEYSTORE_BASE64 y
+      # ANDROID_KEYSTORE_PASSWORD)
+      - name: Llave de firma
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/halo.keystore"
+            echo "HALO_ANDROID_KEYSTORE=$RUNNER_TEMP/halo.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Faltan los secretos de firma: cada APK queda con una firma distinta"
+          fi
+
+      # Sin numero de compilacion (sin CI_BUILD_NUMBER, env -u GITHUB_REF) el
+      # juego no busca actualizaciones de GOAT H1 que pisarian los trucos.
+      - name: Compilar el APK (release)
+        working-directory: src
+        env:
+          HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: env -u GITHUB_REF -u CI_BUILD_NUMBER python3 tools/ci_build.py android release
+
+      - name: Compile cache
+        run: ccache --show-stats
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goat-android-release
+          path: src/dist/halo-android-release
+          # un dia: en un repositorio publico cualquiera con cuenta de GitHub
+          # puede descargar un artifact
+          retention-days: 1
+
+      - name: Publicar el APK como borrador privado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTAS="APK de PRUEBA: Halo C.E con trucos sobre GOAT H1 (${{ steps.version.outputs.ref }}). Trucos: AJUSTES > pestana TRUCOS. Es otra app (GOAT PRUEBA): no reemplaza ninguna. Borrador privado: solo lo ve el dueno del repositorio."
+          CAMBIOS=$(cd repo && git log -1 --format='%s%n%n%b' | grep -v '^Co-Authored-By\|^Claude-Session' | sed '/./,$!d')
+          # (solo las PRUEBAS de GOAT anteriores; las de OpenCE no se tocan)
+          for viejo in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,isDraft,name \
+              --jq '.[] | select(.isDraft and (.name | startswith("GOAT PRUEBA"))) | .tagName'); do
+            gh release delete "$viejo" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          done
+          APK="GOAT-trucos-PRUEBA-${{ steps.version.outputs.ref }}-n${{ github.run_number }}.apk"
+          cp src/dist/halo-android-release/app-release.apk "$APK"
+          gh release create "goat-prueba-$(date +%Y%m%d-%H%M)" "$APK" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "GOAT PRUEBA - GOAT H1 ${{ steps.version.outputs.ref }} (#${{ github.run_number }})" \
+            --notes "$(printf '%s\n\n## Cambios\n%s' "$NOTAS" "$CAMBIOS")" \
+            --draft
