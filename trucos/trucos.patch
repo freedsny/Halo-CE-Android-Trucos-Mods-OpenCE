@@ -3342,7 +3342,7 @@
  			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
-@@ -797,6 +830,30 @@
+@@ -797,6 +830,41 @@
  				hud_draw_numbers(local_player_index, &placement, &numbers,
  					fast_ftol_C(distance), fast_ftol(fmod(fabs((real)(fractional_value * distance)), fractional_value)),
  					0, 0, 0.f);
@@ -3358,22 +3358,33 @@
 +						short line_height = font->leading_height + font->ascending_height + font->descending_height;
 +						short half_width = (short)((render.camera.viewport_bounds.x1 - render.camera.viewport_bounds.x0) / 4);
 +						real_argb_color label_color;
++						real_argb_color shadow_color;
 +						rectangle2d label_bounds;
 +
-+						label_color.alpha = alpha / 255.f;
-+						label_color.rgb = rgb_temp;
++						/* (opaque and not faded: the arrow's own alpha can be 0, as its
++						blend adds) */
++						label_color.alpha = 1.f;
++						pixel32_to_real_rgb_color(hud_port_nav_color_override ? hud_port_nav_color_override : arrow->color,
++							&label_color.rgb);
++						shadow_color.alpha = 1.f;
++						shadow_color.rgb.red = shadow_color.rgb.green = shadow_color.rgb.blue = 0.f;
 +						label_bounds.x0 = corner.x - half_width;
 +						label_bounds.x1 = corner.x + half_width;
 +						label_bounds.y0 = (short)(corner.y + (bitmap->height * (clip->y1 - clip->y0) / 2.f) * scale + line_height);
 +						label_bounds.y1 = label_bounds.y0 + 3 * line_height;
-+						draw_string_set_draw_mode(font_index, NONE, 2, 0, &label_color); /* (2: centered) */
++						/* (a shadow under it, for the bright places) */
++						label_bounds.x0 += 1; label_bounds.x1 += 1; label_bounds.y0 += 1; label_bounds.y1 += 1;
++						draw_string_set_draw_mode(font_index, NONE, 2, 0, &shadow_color); /* (2: centered) */
++						rasterizer_draw_unicode_string(&label_bounds, NULL, NULL, 0, hud_port_nav_label);
++						label_bounds.x0 -= 1; label_bounds.x1 -= 1; label_bounds.y0 -= 1; label_bounds.y1 -= 1;
++						draw_string_set_draw_mode(font_index, NONE, 2, 0, &label_color);
 +						rasterizer_draw_unicode_string(&label_bounds, NULL, NULL, 0, hud_port_nav_label);
 +					}
 +				}
  			}
  		}
  	}
-@@ -810,6 +867,1432 @@
+@@ -810,6 +878,1496 @@
  	return;
  }
  
@@ -3388,8 +3399,9 @@
 +unsigned long config_changes(void);
 +short hs_port_guide_find_target(real_point3d const *player, real_point3d *target, boolean ai_waits);
 +void hs_port_guide_get_target_center(real_point3d *center);
-+long hs_port_guide_get_target_ai(void);
-+char const *hs_port_guide_step_text(void);
++short hs_port_guide_get_target_order(void);
++short hs_port_guide_get_ai_waits(long const **references, short const **orders);
++char const *hs_port_guide_step_text(short step);
 +
 +/* the objective's volume (its middle), for the route's floor */
 +static boolean hud_port_guide_target_is_volume = FALSE;
@@ -3406,13 +3418,18 @@
 +	_hud_port_guide_ally
 +};
 +static short hud_port_guide_kind = _hud_port_guide_none;
++static short hud_port_guide_kind_before = _hud_port_guide_none; /* (the last time's) */
 +static short hud_port_guide_remaining = 0; /* (the step's enemies left) */
 +static char const *hud_port_guide_text = NULL; /* (what to do at the step) */
 +
 +/* the allegiance table's teams (game_allegiance.c's NUMBER_OF_GAME_TEAMS) */
 +#define GUIDE_GAME_TEAMS 10
-+/* (AUTO: how near a weapon is looked for when the player's are empty) */
++/* (AUTO: how near a weapon is looked for when the player's are empty, and how
++near the enemies a step waits to die must be to be pointed at before the place:
++world units, 3.048 meters) */
 +#define GUIDE_WEAPON_SEARCH_DISTANCE 25.f
++#define GUIDE_STEP_ENEMY_DISTANCE 25.f
++#define GUIDE_STEP_ENEMY_DISTANCE_LEAVE 30.f /* (once pointed at, until this far) */
 +
 +static boolean hud_port_guide_nearest_unit(
 +	long unit_index,
@@ -3470,7 +3487,8 @@
 +	long ai_reference,
 +	real_point3d *target,
 +	long *target_object_index,
-+	short *remaining)
++	short *remaining,
++	real *distance_squared_result)
 +{
 +	struct ai_script_actor_reference_iterator iterator;
 +	struct actor_datum *actor;
@@ -3512,6 +3530,7 @@
 +		object_get_bounding_sphere(best_index, target, &radius);
 +		*target_object_index = best_index;
 +		*remaining = count;
++		*distance_squared_result = best_distance_squared;
 +	}
 +
 +	return best_index!=NONE;
@@ -3626,6 +3645,7 @@
 +
 +	*target_object_index = NONE;
 +	hud_port_guide_target_is_volume = FALSE;
++	hud_port_guide_kind_before = hud_port_guide_kind;
 +	hud_port_guide_kind = _hud_port_guide_none;
 +	hud_port_guide_text = NULL;
 +	if (mode==0)
@@ -3640,29 +3660,84 @@
 +	}
 +	else if (mode==3 || mode==4)
 +	{
-+		/* (AUTO: and when no step waits for a place, the enemies a step waits to die) */
 +		short what = hs_port_guide_find_target(&origin, target, mode==4);
++		short step = what ? hs_port_guide_get_target_order() : NONE;
 +
-+		if (what==1)
++		if (what)
 +		{
 +			hud_port_guide_kind = _hud_port_guide_place;
 +			hud_port_guide_target_is_volume = TRUE;
 +			hs_port_guide_get_target_center(&hud_port_guide_target_center);
 +		}
-+		else if (what==2 &&
-+			hud_port_guide_step_enemy(unit_index, hs_port_guide_get_target_ai(), target, target_object_index,
-+				&hud_port_guide_remaining))
++		/* AUTO: the enemies a step waits to die, the nearest of them, when they
++		are near or there is no place to go: the level goes on when they are dead */
++		if (mode==4)
 +		{
-+			hud_port_guide_kind = _hud_port_guide_step_enemy;
++			long const *references;
++			short const *orders;
++			short count = hs_port_guide_get_ai_waits(&references, &orders);
++			short index, best = NONE, best_remaining = 0;
++			real best_distance_squared = 0.f;
++			real_point3d best_target;
++			long best_object_index = NONE;
++			/* (once pointed at, until a little farther: the arrow does not flicker) */
++			real distance = hud_port_guide_kind_before==_hud_port_guide_step_enemy ?
++				GUIDE_STEP_ENEMY_DISTANCE_LEAVE : GUIDE_STEP_ENEMY_DISTANCE;
++
++			for (index = 0; index<count; index++)
++			{
++				real_point3d enemy;
++				long enemy_index;
++				short remaining;
++				real distance_squared;
++
++				if (hud_port_guide_step_enemy(unit_index, references[index], &enemy, &enemy_index, &remaining,
++						&distance_squared) &&
++					(best==NONE || distance_squared<best_distance_squared))
++				{
++					best = index;
++					best_distance_squared = distance_squared;
++					best_target = enemy;
++					best_object_index = enemy_index;
++					best_remaining = remaining;
++				}
++			}
++			if (best!=NONE && (!what || best_distance_squared<=distance*distance))
++			{
++				*target = best_target;
++				*target_object_index = best_object_index;
++				hud_port_guide_remaining = best_remaining;
++				hud_port_guide_kind = _hud_port_guide_step_enemy;
++				hud_port_guide_target_is_volume = FALSE;
++				step = orders[best];
++			}
 +		}
-+		if (what!=0)
-+			hud_port_guide_text = hs_port_guide_step_text();
++		hud_port_guide_text = hs_port_guide_step_text(step);
 +	}
 +	/* AUTO: else the nearest enemy */
 +	if (hud_port_guide_kind==_hud_port_guide_none && (mode==1 || mode==2 || mode==4) &&
 +		hud_port_guide_nearest_unit(unit_index, mode!=1, target, target_object_index))
 +	{
 +		hud_port_guide_kind = mode==1 ? _hud_port_guide_ally : _hud_port_guide_enemy;
++	}
++
++	/* (each change of what it points at, to debug.txt) */
++	{
++		static short logged_mode = NONE, logged_kind = NONE, lines = 0;
++
++		if ((mode!=logged_mode || hud_port_guide_kind!=logged_kind) && lines<200)
++		{
++			static char const *const kinds[] =
++				{ "nothing", "the objective's place", "the enemies the level waits to die", "a weapon (the player's are empty)",
++				"the nearest enemy", "the nearest ally" };
++			static char const *const modes[] = { "off", "ally", "enemy", "objective", "auto" };
++
++			lines++;
++
++			error(_error_silent, "guide arrow (%s): points at %s", modes[mode], kinds[hud_port_guide_kind]);
++			logged_mode = mode;
++			logged_kind = hud_port_guide_kind;
++		}
 +	}
 +
 +	return hud_port_guide_kind!=_hud_port_guide_none;
@@ -4806,7 +4881,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -905,6 +2388,8 @@
+@@ -905,6 +2463,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -4815,7 +4890,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1023,3 +2508,236 @@
+@@ -1023,3 +2583,236 @@
  
  	return;
  }
@@ -5054,7 +5129,7 @@
 +
 --- a/source/hs/hs_runtime.c
 +++ b/source/hs/hs_runtime.c
-@@ -3566,3 +3566,761 @@
+@@ -3566,3 +3566,819 @@
  
  	return FALSE;
  }
@@ -5074,6 +5149,7 @@
 +#define HS_PORT_GUIDE_MAXIMUM_VOLUMES 512
 +#define HS_PORT_GUIDE_MAXIMUM_NODES 4096
 +#define HS_PORT_GUIDE_MAXIMUM_DEPTH 3
++#define HS_PORT_GUIDE_MAXIMUM_AI 8
 +
 +static struct
 +{
@@ -5090,8 +5166,12 @@
 +	short player_functions[2];
 +	short ai_functions[5];
 +	short level; /* the route's place in hs_port_guide_routes: the level */
-+	short target_order; /* the step of the last target, NONE: none */
-+	long target_ai; /* the AI the last target's step waits for, NONE: a place */
++	short target_order; /* the step of the last place, NONE: none */
++	/* (AUTO) the AI the steps from the furthest place on wait to die, and
++	their steps */
++	short ai_count;
++	long ai_references[HS_PORT_GUIDE_MAXIMUM_AI];
++	short ai_orders[HS_PORT_GUIDE_MAXIMUM_AI];
 +} hs_port_guide;
 +
 +/* a syntax node, or NULL: every index is checked, as a script may be broken */
@@ -5273,18 +5353,20 @@
 +	return;
 +}
 +
-+/* the AI an expression counts (ai_living_count <ai> and the like), its
++/* every AI an expression counts (ai_living_count <ai> and the like), in its
 +arguments and the static scripts it calls: a step that waits for the enemies of
-+a place to die. NONE: none */
-+static long hs_port_guide_find_ai(
++a place to die */
++typedef void (*hs_port_guide_ai_proc)(long ai_reference, void *data);
++
++static void hs_port_guide_find_ai(
 +	long expression_index,
 +	boolean siblings,
 +	short depth,
-+	short *budget)
++	short *budget,
++	hs_port_guide_ai_proc proc,
++	void *data)
 +{
-+	long result = NONE;
-+
-+	while (result==NONE && expression_index!=NONE && --*budget>0)
++	while (expression_index!=NONE && --*budget>0)
 +	{
 +		struct hs_syntax_node *node = hs_port_guide_node(expression_index);
 +
@@ -5296,9 +5378,9 @@
 +
 +			if (depth>0 && node->script_index>=0 && node->script_index<scenario->hs_scripts.count)
 +			{
-+				result = hs_port_guide_find_ai(
++				hs_port_guide_find_ai(
 +					TAG_BLOCK_GET_ELEMENT(&scenario->hs_scripts, node->script_index, struct hs_script)->root_expression_index,
-+					FALSE, depth-1, budget);
++					FALSE, depth-1, budget, proc, data);
 +			}
 +		}
 +		else if (!TEST_FLAG(node->flags, _hs_syntax_node_primitive_bit))
@@ -5323,12 +5405,12 @@
 +					!TEST_FLAG(ai->flags, _hs_syntax_node_global_bit) &&
 +					ai->type==_hs_type_ai && ai->data!=NONE)
 +				{
-+					result = ai->data;
++					proc(ai->data, data);
 +				}
 +			}
 +			else if (name)
 +			{
-+				result = hs_port_guide_find_ai(name->next_node_index, TRUE, depth, budget);
++				hs_port_guide_find_ai(name->next_node_index, TRUE, depth, budget, proc, data);
 +			}
 +		}
 +
@@ -5337,7 +5419,7 @@
 +		expression_index = node->next_node_index;
 +	}
 +
-+	return result;
++	return;
 +}
 +
 +static void hs_port_guide_note_volume(
@@ -5373,7 +5455,7 @@
 +	hs_port_guide.progress = 0;
 +	hs_port_guide.level = NONE;
 +	hs_port_guide.target_order = NONE;
-+	hs_port_guide.target_ai = NONE;
++	hs_port_guide.ai_count = 0;
 +	for (index = 0; index<HS_PORT_GUIDE_MAXIMUM_VOLUMES; index++)
 +		hs_port_guide.volume_order[index] = NONE;
 +
@@ -5432,6 +5514,9 @@
 +		hs_port_guide.matched = hs_port_guide.count>0;
 +		hs_port_guide.level = best_level;
 +	}
++	error(_error_silent, "guide arrow: %s", hs_port_guide.matched ?
++		csprintf(temporary, "the level's route is %d (%d of its steps)", hs_port_guide.level, hs_port_guide.count) :
++		"no route for this level");
 +
 +	return;
 +}
@@ -5601,13 +5686,33 @@
 +	return choice.found;
 +}
 +
++static void hs_port_guide_note_ai(
++	long ai_reference,
++	void *data)
++{
++	short order = *(short *)data;
++	short index;
++
++	for (index = 0; index<hs_port_guide.ai_count; index++)
++		if (hs_port_guide.ai_references[index]==ai_reference)
++			return;
++	if (hs_port_guide.ai_count<HS_PORT_GUIDE_MAXIMUM_AI)
++	{
++		hs_port_guide.ai_references[hs_port_guide.ai_count] = ai_reference;
++		hs_port_guide.ai_orders[hs_port_guide.ai_count] = order;
++		hs_port_guide.ai_count++;
++	}
++
++	return;
++}
++
 +/* the AI a thread's sleep_until counts, if it waits for enemies to die */
-+static long hs_port_guide_thread_ai(
-+	struct hs_thread_datum *thread)
++static void hs_port_guide_thread_ai(
++	struct hs_thread_datum *thread,
++	short order)
 +{
 +	struct hs_stack_frame *frame = thread->stack;
 +	short frames = 0;
-+	long result = NONE;
 +
 +	while (frame && frames++<64 &&
 +		(byte *)frame>=thread->stack_data && (byte *)frame<thread->stack_data+HS_THREAD_STACK_SIZE)
@@ -5622,24 +5727,26 @@
 +			short budget = HS_PORT_GUIDE_MAXIMUM_NODES;
 +
 +			if (name)
-+				result = hs_port_guide_find_ai(name->next_node_index, FALSE, HS_PORT_GUIDE_MAXIMUM_DEPTH, &budget);
++			{
++				hs_port_guide_find_ai(name->next_node_index, FALSE, HS_PORT_GUIDE_MAXIMUM_DEPTH, &budget,
++					hs_port_guide_note_ai, &order);
++			}
 +			break;
 +		}
 +		frame = frame->previous;
 +	}
 +
-+	return result;
++	return;
 +}
 +
-+/* what the level waits for: _hs_port_guide_place (target is where), with
-+ai_waits _hs_port_guide_enemies (hs_port_guide_get_target_ai: the enemies the
-+step waits to die, when no step from the furthest place on waits for a place),
-+or _hs_port_guide_nothing */
++/* what the level waits for: _hs_port_guide_place (target is where) or
++_hs_port_guide_nothing; with ai_waits, also the AI the steps from the furthest
++place on wait to die (hs_port_guide_get_ai_waits: AUTO points at them when
++they are near) */
 +enum
 +{
 +	_hs_port_guide_nothing = 0,
-+	_hs_port_guide_place,
-+	_hs_port_guide_enemies
++	_hs_port_guide_place
 +};
 +
 +short hs_port_guide_find_target(
@@ -5650,11 +5757,12 @@
 +	struct scenario *scenario;
 +	long threads[HS_PORT_GUIDE_MAXIMUM_SCRIPTS];
 +	long thread_index;
-+	short order, fallback = NONE, found_order = NONE, ai_order = NONE;
-+	long ai_reference = NONE;
++	short order, fallback = NONE, found_order = NONE;
 +	real best_distance_squared = 0.f;
 +	boolean found = FALSE;
 +
++	/* (none from another map: their AI is not this one's) */
++	hs_port_guide.ai_count = 0;
 +	if (!hs_runtime_globals.initialized || !hs_thread_data || global_scenario_index==NONE)
 +		return _hs_port_guide_nothing;
 +
@@ -5667,7 +5775,7 @@
 +		hs_port_guide_match();
 +	}
 +	hs_port_guide.target_order = NONE;
-+	hs_port_guide.target_ai = NONE;
++	hs_port_guide.ai_count = 0;
 +	if (!hs_port_guide.matched)
 +		return _hs_port_guide_nothing;
 +
@@ -5722,6 +5830,9 @@
 +				{
 +					real_point3d candidate, center;
 +
++					if (ai_waits)
++						hs_port_guide_thread_ai(thread, order);
++
 +					if (hs_port_guide_thread_target(thread, player, &candidate, &center))
 +					{
 +						real distance_squared = distance_squared3d(player, &candidate);
@@ -5734,12 +5845,6 @@
 +							found = TRUE;
 +							found_order = order;
 +						}
-+					}
-+					else if (ai_waits && ai_reference==NONE)
-+					{
-+						ai_reference = hs_port_guide_thread_ai(thread);
-+						if (ai_reference!=NONE)
-+							ai_order = order;
 +					}
 +				}
 +				else if (!found)
@@ -5762,12 +5867,6 @@
 +		hs_port_guide.target_order = found_order;
 +		return _hs_port_guide_place;
 +	}
-+	if (ai_reference!=NONE)
-+	{
-+		hs_port_guide.target_order = ai_order;
-+		hs_port_guide.target_ai = ai_reference;
-+		return _hs_port_guide_enemies;
-+	}
 +	if (fallback!=NONE)
 +	{
 +		hs_port_guide.target_order = fallback;
@@ -5777,34 +5876,46 @@
 +	return _hs_port_guide_nothing;
 +}
 +
-+long hs_port_guide_get_target_ai(
++short hs_port_guide_get_target_order(
 +	void)
 +{
-+	return hs_port_guide.target_ai;
++	return hs_port_guide.target_order;
 +}
 +
-+/* what to do at the last target's step, in the game's font (without accents),
-+or NULL: the text of its script in hs_port_guide_texts, else of the nearest
-+step before it that has one */
++/* the AI the steps from the furthest place on wait to die, found by the last
++hs_port_guide_find_target with ai_waits, and their steps */
++short hs_port_guide_get_ai_waits(
++	long const **references,
++	short const **orders)
++{
++	*references = hs_port_guide.ai_references;
++	*orders = hs_port_guide.ai_orders;
++
++	return hs_port_guide.ai_count;
++}
++
++/* what to do at a step, in the game's font (without accents), or NULL: the
++text of its script in hs_port_guide_texts, else of the nearest step before it
++that has one, else the level's ("*"). Each new one goes to debug.txt */
 +char const *hs_port_guide_step_text(
-+	void)
++	short step)
 +{
 +	static short last_level = NONE, last_order = NONE;
 +	static char const *last_text = NULL;
++	struct hs_port_guide_text const *text;
 +	short order;
 +
-+	if (!hs_port_guide.matched || hs_port_guide.level==NONE || hs_port_guide.target_order==NONE)
++	if (!hs_port_guide.matched || hs_port_guide.level==NONE || step==NONE)
 +		return NULL;
-+	if (hs_port_guide.level==last_level && hs_port_guide.target_order==last_order)
++	if (hs_port_guide.level==last_level && step==last_order)
 +		return last_text;
 +
 +	last_level = hs_port_guide.level;
-+	last_order = hs_port_guide.target_order;
++	last_order = step;
 +	last_text = NULL;
-+	for (order = MIN(hs_port_guide.target_order, hs_port_guide.count-1); order>=0 && !last_text; order--)
++	for (order = MIN(step, hs_port_guide.count-1); order>=0 && !last_text; order--)
 +	{
 +		char const *name = hs_port_guide_script_name(hs_port_guide.script_indices[order]);
-+		struct hs_port_guide_text const *text;
 +
 +		for (text = hs_port_guide_texts; text->script; text++)
 +			if (text->level==hs_port_guide.level && !strcmp(text->script, name))
@@ -5812,6 +5923,28 @@
 +				last_text = text->text;
 +				break;
 +			}
++	}
++	for (text = hs_port_guide_texts; !last_text && text->script; text++)
++		if (text->level==hs_port_guide.level && !strcmp(text->script, "*"))
++			last_text = text->text;
++	/* (each step once a level) */
++	{
++		static void const *logged_scripts = NULL;
++		static unsigned long logged[HS_PORT_GUIDE_MAXIMUM_SCRIPTS/32+1];
++
++		if (logged_scripts!=hs_port_guide.scripts_address)
++		{
++			logged_scripts = hs_port_guide.scripts_address;
++			memset(logged, 0, sizeof(logged));
++		}
++		if (step>=0 && step<HS_PORT_GUIDE_MAXIMUM_SCRIPTS && !(logged[step/32] & (1UL<<(step%32))))
++		{
++			logged[step/32] |= 1UL<<(step%32);
++			error(_error_silent, "guide arrow: level %d, step %d of %d (%s): %s",
++				hs_port_guide.level, step, hs_port_guide.count,
++				step<hs_port_guide.count ? hs_port_guide_script_name(hs_port_guide.script_indices[step]) : "",
++				last_text ? last_text : "(no text)");
++		}
 +	}
 +
 +	return last_text;
@@ -12933,7 +13066,7 @@
  					&starting_profile->secondary_weapon,
 --- /dev/null
 +++ b/source/hs/hs_port_guide_routes.h
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,137 @@
 +/* port: the guide arrow's routes (TRUCOS, GUIA, OBJETIVO): for each campaign
 +level, the scripts that move it on as the player walks into its trigger volumes,
 +in the order the level wakes them. Only their names: the arrow reads, from each
@@ -13038,11 +13171,12 @@
 +	NULL
 +};
 +
-+/* port: what to do, for the steps of the routes above whose part of the level
-+is clear (TRUCOS, GUIA: under the arrow, and in the HUD when it changes). Each
-+by the route's place in the list (0 a10 ... 9 d40) and the step's script: a
-+step without one has the text of the nearest step before it. In the game's font,
-+without accents. Ends with a NULL script */
++/* port: what to do (TRUCOS, GUIA: under the arrow, and in the HUD when it
++changes): for each level (by its route's place in the list above, 0 a10 ... 9
++d40) one for the whole level ("*"), and for the steps whose part of the level is
++clear one by the step's script; a step without one has the text of the nearest
++step before it that has one, else the level's. In the game's font, without
++accents. Ends with a NULL script */
 +struct hs_port_guide_text
 +{
 +	short level;
@@ -13052,21 +13186,22 @@
 +
 +static struct hs_port_guide_text const hs_port_guide_texts[] =
 +{
++	{ 0, "*", "Escapa de la nave" },
 +	{ 0, "cont_thing", "Haz las pruebas del tripulante" },
 +	{ 0, "mission_cryo_explosion", "Sal de la sala criogenica" },
 +	{ 0, "mission_bridge", "Ve al puente de mando" },
 +	{ 0, "mission_cafeteria", "Busca una capsula de escape" },
-+	{ 1, "mission_a30", "Busca y rescata a los marines" },
-+	{ 2, "mission_a50", "Entra en la nave del Covenant" },
++	{ 1, "*", "Busca y rescata a los marines" },
++	{ 2, "*", "Entra en la nave del Covenant" },
 +	{ 2, "mission_muster_bay", "Busca al capitan Keyes en la nave" },
-+	{ 3, "main_b30", "Busca el Cartografo Silencioso" },
++	{ 3, "*", "Busca el Cartografo Silencioso" },
 +	{ 3, "mission_shaftb", "Baja hasta la sala del mapa" },
-+	{ 4, "mission_b40", "Llega a la sala de control" },
-+	{ 5, "mission_c10", "Busca al capitan Keyes" },
-+	{ 6, "section1", "Sigue a 343 Guilty Spark hasta el Indice" },
-+	{ 7, "e3_a", "Destruye los generadores de pulso" },
-+	{ 8, "section1", "Busca al capitan Keyes" },
-+	{ 9, "section1", "Haz estallar la nave y escapa" },
++	{ 4, "*", "Llega a la sala de control" },
++	{ 5, "*", "Busca al capitan Keyes" },
++	{ 6, "*", "Sigue a 343 Guilty Spark hasta el Indice" },
++	{ 7, "*", "Destruye los generadores de pulso" },
++	{ 8, "*", "Busca al capitan Keyes" },
++	{ 9, "*", "Haz estallar la nave y escapa" },
 +	{ 0, NULL, NULL }
 +};
 --- a/source/saved games/game_state.c	
