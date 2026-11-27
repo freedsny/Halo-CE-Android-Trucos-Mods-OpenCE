@@ -3384,7 +3384,7 @@
  			}
  		}
  	}
-@@ -810,6 +878,1496 @@
+@@ -810,6 +878,1516 @@
  	return;
  }
  
@@ -4718,9 +4718,15 @@
 +/* port: the guide arrow's lines (custom_render_nav_point draws them under it):
 +SUBE or BAJA when the target is on another floor near enough, how many of the
 +step's enemies are left, a weapon for empty ones, and what to do at the step;
-+what to do also goes to the HUD's messages when it changes */
++what to do also goes to the HUD's messages when it changes. What to do is not
++always there, it is in the way: a while when it changes or the arrow comes back
++(after a cutscene, a load, the pause), then a little every few minutes */
 +#define GUIDE_FLOOR_HEIGHT 1.2f /* (world units: a floor is about 3 meters) */
 +#define GUIDE_TEXT_MESSAGE_MILLISECONDS 10000
++#define GUIDE_TEXT_FIRST_MILLISECONDS 8000 /* (when it changes or comes back) */
++#define GUIDE_TEXT_AGAIN_MILLISECONDS 120000 /* (then every this long, ...) */
++#define GUIDE_TEXT_AGAIN_SHOWN_MILLISECONDS 6000 /* (... this long) */
++#define GUIDE_TEXT_BACK_MILLISECONDS 5000 /* (the arrow away this long: it comes back) */
 +
 +static void hud_port_guide_lines(
 +	short local_player_index,
@@ -4731,6 +4737,9 @@
 +{
 +	static char const *printed_text = NULL;
 +	static unsigned long printed_at = 0;
++	static char const *shown_text = NULL;
++	static unsigned long shown_since = 0, last_drawn = 0;
++	unsigned long now = system_milliseconds();
 +	real_point3d origin, player_floor, goal_floor;
 +	long surface_index;
 +	real dz, horizontal;
@@ -4778,7 +4787,17 @@
 +		for (index = 0; index<NUMBEROF(text)-1 && hud_port_guide_text[index]; index++)
 +			text[index] = (wchar_t)(unsigned char)hud_port_guide_text[index];
 +		text[index] = 0;
-+		GUIDE_LINE(L"%ls", text);
++		/* (a while when it changes or the arrow comes back, then a little now and then) */
++		if (hud_port_guide_text!=shown_text || !last_drawn || now-last_drawn>=GUIDE_TEXT_BACK_MILLISECONDS)
++		{
++			shown_text = hud_port_guide_text;
++			shown_since = now;
++		}
++		if (now-shown_since<GUIDE_TEXT_FIRST_MILLISECONDS ||
++			(now-shown_since)%GUIDE_TEXT_AGAIN_MILLISECONDS<GUIDE_TEXT_AGAIN_SHOWN_MILLISECONDS)
++		{
++			GUIDE_LINE(L"%ls", text);
++		}
 +
 +		if (hud_port_guide_text!=printed_text &&
 +			(!printed_at || system_milliseconds()-printed_at>=GUIDE_TEXT_MESSAGE_MILLISECONDS))
@@ -4792,6 +4811,7 @@
 +			printed_at = system_milliseconds();
 +		}
 +	}
++	last_drawn = now;
 +#undef GUIDE_LINE
 +
 +	return;
@@ -4881,7 +4901,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -905,6 +2463,8 @@
+@@ -905,6 +2483,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -4890,7 +4910,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1023,3 +2583,236 @@
+@@ -1023,3 +2603,236 @@
  
  	return;
  }
