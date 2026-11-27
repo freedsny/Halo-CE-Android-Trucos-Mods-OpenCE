@@ -585,7 +585,7 @@
  }
 --- a/port/linux/src/port_config.c
 +++ b/port/linux/src/port_config.c
-@@ -582,6 +582,232 @@
+@@ -582,6 +582,234 @@
  		"profile starts at The Pillar of Autumn and opens each level as the one\n"
  		"before it is finished, as on the Xbox. Profiles already made keep their\n"
  		"progress; the console's profile_reset_campaign starts one over." },
@@ -723,8 +723,10 @@
 +	{ "guide.mode", _config_string, "\"off\"", "HALO_GUIDE_MODE", _environment_value, _platform_all,
 +		"The guide arrow (pause menu, SETTINGS, TRUCOS, GUIA), drawn like the scripts'\n"
 +		"markers, with the distance in meters: \"off\", \"ally\" (the nearest ally),\n"
-+		"\"enemy\" (the nearest enemy) or \"objective\" (where the campaign level waits\n"
-+		"for the player to go next)." },
++		"\"enemy\" (the nearest enemy), \"objective\" (where the campaign level waits\n"
++		"for the player to go next) or \"auto\" (the objective; else the enemies the\n"
++		"level waits to die, with how many are left; a weapon when the player's are\n"
++		"empty; else the nearest enemy)." },
 +	{ "hud.shield_x", _config_integer, "0", "HALO_HUD_SHIELD_X", _environment_value, _platform_all,
 +		"Moves the shield part of the HUD, in HUD units (the tags' 640x480): positive\n"
 +		"is right, negative the other way. 0: where the tags put it." },
@@ -818,6 +820,535 @@
  
  	{ "game.downloaded_maps", _config_string, "\"\"", "HALO_DOWNLOADED_MAPS", _environment_value, _platform_all,
  		"Maps played as downloaded ones, besides those map sharing downloaded:\n"
+--- /dev/null
++++ b/port/linux/src/port_tag_packs.c
+@@ -0,0 +1,461 @@
++/*
++PORT_TAG_PACKS.C
++
++The tag packs' manifests (port_tag_packs.h), read once from the files
++tools/embed_assets.py embedded from port/assets/tag_packs. Each is
++
++	name = "<owner>_<what>"           its file's name, and maps/<name>.pack
++	version = 1                       raised by hand when the keep rules
++	                                  mean something else than they say
++	legacy_file_names = ["old.pack"]  renamed to the pack's at start-up
++	maps = ["c40"]                    map files, at most 32, 31 letters
++	minimum_bitmaps = 1               a map with fewer is not read right
++	minimum_sounds = 0
++	wanted = ["always"]               or "setting:<key>", "condition:<name>"
++
++	[keep]                            whose pixels and samples are kept,
++	include_contains = ["flood"]      by the tag's name (any case): when
++	include_prefixes = ["effects\\"]  there are includes, one of them;
++	exclude_contains = []             and none of the excludes
++	exclude_bitmap_prefixes = []
++	exclude_sound_prefixes = []
++
++	[text]                            the main menu's words for it
++	notice = "..."
++	building = "..."
++	ready = "..."
++	failed = "..."
++
++What a pack holds is hashed (port_tag_packs_content) from its version, maps,
++minimums and keep rules, in that order, each lower-cased: tools/tag_pack.py
++hashes the same text, so a pack it writes is one the game reads.
++*/
++
++#include "platform.h"
++#include "port_tag_packs.h"
++#include "tomlc17.h"
++
++#include <ctype.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#define MAXIMUM_TAG_PACKS 32
++#define MAXIMUM_NAME_LENGTH 64
++#define MAXIMUM_LEGACY 4
++#define MAXIMUM_WANTED 8
++#define MAXIMUM_RULES 32
++#define MAXIMUM_RULE_LENGTH 128
++#define MAXIMUM_TEXT_LENGTH 256
++
++enum
++{
++	RULE_INCLUDE_CONTAINS,
++	RULE_INCLUDE_PREFIXES,
++	RULE_EXCLUDE_CONTAINS,
++	RULE_EXCLUDE_BITMAP_PREFIXES,
++	RULE_EXCLUDE_SOUND_PREFIXES,
++	RULE_LISTS
++};
++
++static const char *const rule_keys[RULE_LISTS] =
++{
++	"include_contains", "include_prefixes", "exclude_contains", "exclude_bitmap_prefixes", "exclude_sound_prefixes",
++};
++
++enum
++{
++	TEXT_NOTICE,
++	TEXT_BUILDING,
++	TEXT_READY,
++	TEXT_FAILED,
++	TEXTS
++};
++
++static const char *const text_keys[TEXTS] = { "notice", "building", "ready", "failed" };
++
++struct rule_list
++{
++	char rules[MAXIMUM_RULES][MAXIMUM_RULE_LENGTH];
++	long count;
++};
++
++struct tag_pack
++{
++	char name[MAXIMUM_NAME_LENGTH];
++	long version;
++	char maps[PORT_TAG_PACK_MAPS][PORT_TAG_PACK_MAP_LENGTH];
++	long map_count;
++	char legacy[MAXIMUM_LEGACY][MAXIMUM_NAME_LENGTH + 8];
++	long legacy_count;
++	char wanted[MAXIMUM_WANTED][MAXIMUM_NAME_LENGTH];
++	long wanted_count;
++	long minimum_bitmaps;
++	long minimum_sounds;
++	struct rule_list rules[RULE_LISTS];
++	char texts[TEXTS][MAXIMUM_TEXT_LENGTH];
++	unsigned long content;
++};
++
++static struct tag_pack *packs;
++static long pack_count;
++static int packs_read;
++
++/* ---------- reading */
++
++static void lower_copy(char *destination, size_t size, const char *source)
++{
++	size_t index;
++
++	for (index = 0; source[index] && index + 1 < size; index++)
++		destination[index] = (char)tolower((unsigned char)source[index]);
++	destination[index] = 0;
++}
++
++static int name_usable(const char *name)
++{
++	const char *at;
++
++	if (!name[0] || !strchr(name, '_') || name[0] == '_')
++		return 0;
++	for (at = name; *at; at++)
++	{
++		if (!(*at >= 'a' && *at <= 'z') && !(*at >= '0' && *at <= '9') && *at != '_')
++			return 0;
++	}
++	return 1;
++}
++
++/* the strings of an array key, lower-cased, at most `maximum` of `length`;
++how many, or -1 when the key is there and is not an array of strings */
++static long strings_read(toml_datum_t table, const char *key, const char *path, char *into, long maximum,
++	size_t length, int lower)
++{
++	toml_datum_t value = toml_get(table, key);
++	long count = 0;
++	int index;
++
++	if (value.type == TOML_UNKNOWN)
++		return 0;
++	if (value.type != TOML_ARRAY)
++	{
++		platform_log("tag packs: %s line %d: %s is not a list", path, value.lineno, key);
++		return -1;
++	}
++	for (index = 0; index < value.u.arr.size; index++)
++	{
++		toml_datum_t item = value.u.arr.elem[index];
++
++		if (item.type != TOML_STRING || !item.u.s[0] || strlen(item.u.s) >= length)
++		{
++			platform_log("tag packs: %s line %d: an entry of %s is not a string of at most %u letters", path,
++				item.lineno, key, (unsigned)length - 1);
++			return -1;
++		}
++		if (count >= maximum)
++		{
++			platform_log("tag packs: %s: more than %ld in %s", path, maximum, key);
++			return -1;
++		}
++		if (lower)
++			lower_copy(into + count * length, length, item.u.s);
++		else
++			snprintf(into + count * length, length, "%s", item.u.s);
++		count++;
++	}
++	return count;
++}
++
++static long integer_read(toml_datum_t table, const char *key, long otherwise)
++{
++	toml_datum_t value = toml_get(table, key);
++
++	return value.type == TOML_INT64 && value.u.int64 >= 0 && value.u.int64 < 0x7FFFFFFF ? (long)value.u.int64 :
++		otherwise;
++}
++
++/* ---------- what a pack holds */
++
++static unsigned long hash_text(unsigned long hash, const char *text)
++{
++	for (; *text; text++)
++		hash = ((hash ^ (unsigned char)*text) * 16777619UL) & 0xFFFFFFFFUL;
++	return hash;
++}
++
++static unsigned long content_hash(const struct tag_pack *pack)
++{
++	char line[MAXIMUM_RULE_LENGTH + 64];
++	unsigned long hash = 0x811C9DC5UL;
++	long index;
++	int list;
++
++	snprintf(line, sizeof(line), "rpak2\nversion=%ld\n", pack->version);
++	hash = hash_text(hash, line);
++	for (index = 0; index < pack->map_count; index++)
++	{
++		snprintf(line, sizeof(line), "map=%s\n", pack->maps[index]);
++		hash = hash_text(hash, line);
++	}
++	snprintf(line, sizeof(line), "minimum_bitmaps=%ld\nminimum_sounds=%ld\n", pack->minimum_bitmaps,
++		pack->minimum_sounds);
++	hash = hash_text(hash, line);
++	for (list = 0; list < RULE_LISTS; list++)
++	{
++		for (index = 0; index < pack->rules[list].count; index++)
++		{
++			snprintf(line, sizeof(line), "%s=%s\n", rule_keys[list], pack->rules[list].rules[index]);
++			hash = hash_text(hash, line);
++		}
++	}
++	/* (never 0, which a pack's header would read as none) */
++	return hash ? hash : 1;
++}
++
++/* a manifest; 0 when it is not one */
++static int pack_read(struct tag_pack *pack, const char *path, const char *text, size_t size)
++{
++	char stem[MAXIMUM_NAME_LENGTH];
++	const char *leaf = strrchr(path, '/');
++	toml_result_t result;
++	toml_datum_t value;
++	toml_datum_t table;
++	size_t length;
++	int index;
++	int good = 1;
++
++	memset(pack, 0, sizeof(*pack));
++	leaf = leaf ? leaf + 1 : path;
++	length = strlen(leaf);
++	if (length < 6 || strcmp(leaf + length - 5, ".toml") || length - 5 >= sizeof(stem))
++		return 0;
++	memcpy(stem, leaf, length - 5);
++	stem[length - 5] = 0;
++	result = toml_parse(text, (int)size);
++	if (!result.ok)
++	{
++		platform_log("tag packs: %s: %s; it is left out", path, result.errmsg);
++		toml_free(result);
++		return 0;
++	}
++	value = toml_get(result.toptab, "name");
++	if (value.type != TOML_STRING || strcmp(value.u.s, stem) || !name_usable(value.u.s))
++	{
++		platform_log("tag packs: %s: its name is not its file's, of lower-case letters, digits and _, with "
++			"its owner's first (owner_what); it is left out", path);
++		toml_free(result);
++		return 0;
++	}
++	snprintf(pack->name, sizeof(pack->name), "%s", value.u.s);
++	pack->version = integer_read(result.toptab, "version", 1);
++	pack->minimum_bitmaps = integer_read(result.toptab, "minimum_bitmaps", 0);
++	pack->minimum_sounds = integer_read(result.toptab, "minimum_sounds", 0);
++	pack->map_count = strings_read(result.toptab, "maps", path, pack->maps[0], PORT_TAG_PACK_MAPS,
++		PORT_TAG_PACK_MAP_LENGTH, 1);
++	pack->legacy_count = strings_read(result.toptab, "legacy_file_names", path, pack->legacy[0], MAXIMUM_LEGACY,
++		sizeof(pack->legacy[0]), 0);
++	pack->wanted_count = strings_read(result.toptab, "wanted", path, pack->wanted[0], MAXIMUM_WANTED,
++		sizeof(pack->wanted[0]), 0);
++	if (pack->map_count <= 0 || pack->legacy_count < 0 || pack->wanted_count < 0)
++	{
++		if (!pack->map_count)
++			platform_log("tag packs: %s names no maps; it is left out", path);
++		good = 0;
++	}
++	table = toml_get(result.toptab, "keep");
++	for (index = 0; good && index < RULE_LISTS; index++)
++	{
++		pack->rules[index].count = table.type == TOML_TABLE ? strings_read(table, rule_keys[index], path,
++			pack->rules[index].rules[0], MAXIMUM_RULES, MAXIMUM_RULE_LENGTH, 1) : 0;
++		good = pack->rules[index].count >= 0;
++	}
++	table = toml_get(result.toptab, "text");
++	for (index = 0; good && index < TEXTS; index++)
++	{
++		value = table.type == TOML_TABLE ? toml_get(table, text_keys[index]) : table;
++		if (value.type == TOML_STRING)
++			snprintf(pack->texts[index], sizeof(pack->texts[index]), "%s", value.u.s);
++	}
++	toml_free(result);
++	if (!good)
++	{
++		platform_log("tag packs: %s is left out", path);
++		return 0;
++	}
++	pack->content = content_hash(pack);
++	return 1;
++}
++
++static void packs_read_once(void)
++{
++	unsigned int index;
++
++	if (packs_read)
++		return;
++	packs_read = 1;
++	packs = calloc(MAXIMUM_TAG_PACKS, sizeof(*packs));
++	if (!packs)
++		return;
++	for (index = 0; index < tag_pack_manifests_embedded_count && pack_count < MAXIMUM_TAG_PACKS; index++)
++	{
++		const struct tag_pack_manifest_embedded *embedded = &tag_pack_manifests_embedded[index];
++		long other;
++
++		if (!embedded->path || !pack_read(&packs[pack_count], embedded->path, (const char *)embedded->data,
++			embedded->size))
++			continue;
++		for (other = 0; other < pack_count && strcmp(packs[other].name, packs[pack_count].name); other++)
++		{
++		}
++		if (other < pack_count)
++		{
++			platform_log("tag packs: %s is named twice; the second is left out", packs[pack_count].name);
++			continue;
++		}
++		platform_log("tag packs: %s, %ld maps, content %08lx", packs[pack_count].name, packs[pack_count].map_count,
++			packs[pack_count].content);
++		pack_count++;
++	}
++}
++
++/* ---------- asking */
++
++static const struct tag_pack *pack_get(long pack)
++{
++	packs_read_once();
++	return pack >= 0 && pack < pack_count ? &packs[pack] : NULL;
++}
++
++long port_tag_packs_count(void)
++{
++	packs_read_once();
++	return pack_count;
++}
++
++const char *port_tag_packs_name(long pack)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got ? got->name : "";
++}
++
++long port_tag_packs_find(const char *name)
++{
++	long index;
++
++	packs_read_once();
++	for (index = 0; name && index < pack_count; index++)
++	{
++		if (!strcmp(packs[index].name, name))
++			return index;
++	}
++	return -1;
++}
++
++unsigned long port_tag_packs_content(long pack)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got ? got->content : 0;
++}
++
++long port_tag_packs_map_count(long pack)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got ? got->map_count : 0;
++}
++
++const char *port_tag_packs_map(long pack, long index)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got && index >= 0 && index < got->map_count ? got->maps[index] : "";
++}
++
++long port_tag_packs_legacy_count(long pack)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got ? got->legacy_count : 0;
++}
++
++const char *port_tag_packs_legacy(long pack, long index)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got && index >= 0 && index < got->legacy_count ? got->legacy[index] : "";
++}
++
++long port_tag_packs_minimum_bitmaps(long pack)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got ? got->minimum_bitmaps : 0;
++}
++
++long port_tag_packs_minimum_sounds(long pack)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got ? got->minimum_sounds : 0;
++}
++
++long port_tag_packs_wanted_count(long pack)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got ? got->wanted_count : 0;
++}
++
++const char *port_tag_packs_wanted(long pack, long index)
++{
++	const struct tag_pack *got = pack_get(pack);
++
++	return got && index >= 0 && index < got->wanted_count ? got->wanted[index] : "";
++}
++
++static int rules_match(const struct rule_list *list, const char *lower, int prefixes)
++{
++	long index;
++
++	for (index = 0; index < list->count; index++)
++	{
++		if (prefixes ? !strncmp(lower, list->rules[index], strlen(list->rules[index])) :
++			strstr(lower, list->rules[index]) != NULL)
++			return 1;
++	}
++	return 0;
++}
++
++int port_tag_packs_keep(long pack, unsigned long group, const char *name)
++{
++	const struct tag_pack *got = pack_get(pack);
++	char lower[256];
++
++	if (!got || !name)
++		return 0;
++	lower_copy(lower, sizeof(lower), name);
++	if ((got->rules[RULE_INCLUDE_CONTAINS].count || got->rules[RULE_INCLUDE_PREFIXES].count) &&
++		!rules_match(&got->rules[RULE_INCLUDE_CONTAINS], lower, 0) &&
++		!rules_match(&got->rules[RULE_INCLUDE_PREFIXES], lower, 1))
++		return 0;
++	if (rules_match(&got->rules[RULE_EXCLUDE_CONTAINS], lower, 0))
++		return 0;
++	if (group == 0x6269746DUL /* 'bitm' */)
++		return !rules_match(&got->rules[RULE_EXCLUDE_BITMAP_PREFIXES], lower, 1);
++	return !rules_match(&got->rules[RULE_EXCLUDE_SOUND_PREFIXES], lower, 1);
++}
++
++const char *port_tag_packs_text(long pack, const char *which)
++{
++	const struct tag_pack *got = pack_get(pack);
++	int index;
++
++	for (index = 0; got && which && index < TEXTS; index++)
++	{
++		if (!strcmp(which, text_keys[index]))
++			return got->texts[index];
++	}
++	return "";
++}
+--- /dev/null
++++ b/port/linux/src/port_tag_packs.h
+@@ -0,0 +1,62 @@
++/*
++PORT_TAG_PACKS.H
++
++The tag packs' manifests (port_tag_packs.c): one TOML file each in
++port/assets/tag_packs, embedded by tools/embed_assets.py, naming a pack
++maps/<name>.pack, the maps it is made of, which of their pixels and samples
++it keeps, and when it is wanted. The game builds and reads the packs
++(port/linux/game/tag_pack.c, tag_import.c, which declare these for
++themselves: keep them the same). port/linux/TAG_INJECTION.md has the format.
++*/
++
++#ifndef PORT_TAG_PACKS_H
++#define PORT_TAG_PACKS_H
++
++/* an embedded manifest, by its file's name in port/assets/tag_packs */
++struct tag_pack_manifest_embedded
++{
++	const char *path;
++	const unsigned int *data;
++	unsigned int size;
++};
++
++extern const struct tag_pack_manifest_embedded tag_pack_manifests_embedded[];
++extern const unsigned int tag_pack_manifests_embedded_count;
++
++/* the most maps a pack is made of, and the longest map name (a pack's
++record holds it: format 2's 32 bytes, the terminator included) */
++#define PORT_TAG_PACK_MAPS 32
++#define PORT_TAG_PACK_MAP_LENGTH 32
++
++/* the manifests read (the first call reads them): how many. One that does
++not parse, or whose name is not its file's, is logged and left out */
++long port_tag_packs_count(void);
++/* a pack's name (<owner>_<what>, its file maps/<name>.pack), or -1 */
++const char *port_tag_packs_name(long pack);
++long port_tag_packs_find(const char *name);
++/* a hash of what the pack holds: its version, maps, minimums and keep
++rules (what tools/tag_pack.py hashes alike). A pack file of another is
++stale, and written again */
++unsigned long port_tag_packs_content(long pack);
++/* its maps (a map file's name, without .map) */
++long port_tag_packs_map_count(long pack);
++const char *port_tag_packs_map(long pack, long index);
++/* the files it was once called (each renamed to the pack's at start-up) */
++long port_tag_packs_legacy_count(long pack);
++const char *port_tag_packs_legacy(long pack, long index);
++/* the fewest bitmaps and sounds a map of it has whose pixels and samples it
++keeps (fewer, and the map's tags were not read right) */
++long port_tag_packs_minimum_bitmaps(long pack);
++long port_tag_packs_minimum_sounds(long pack);
++/* when it is wanted at start-up: "always", "setting:<a boolean setting>",
++"condition:<a name tag_pack_conditions.c gives>" */
++long port_tag_packs_wanted_count(long pack);
++const char *port_tag_packs_wanted(long pack, long index);
++/* whether it keeps a bitmap's pixels ('bitm') or a sound's samples
++('snd!') of this tag name */
++int port_tag_packs_keep(long pack, unsigned long group, const char *name);
++/* the words shown while it is written: "notice", "building", "ready",
++"failed" (UTF-8, lines split by \n); "" when it has none */
++const char *port_tag_packs_text(long pack, const char *which);
++
++#endif
 --- a/port/linux/game/menu_tags.c
 +++ b/port/linux/game/menu_tags.c
 @@ -410,6 +410,8 @@
@@ -850,7 +1381,7 @@
  /* the PC version's pause menu's row pitch (30 apart). The pause box's frames
 --- a/tools/port_settings.py
 +++ b/tools/port_settings.py
-@@ -560,6 +560,285 @@
+@@ -560,6 +560,286 @@
      ],
  }
  
@@ -1128,15 +1659,16 @@
 +    "screen": "cheats_guia_screen", "header": ("header_guia", f"{PE}/network_setup/cheats/header_guia"), "spacing": 30,
 +    "rows": [
 +        ("FLECHA GUIA:", "guide.mode",
-+         [("APAGADA", "off"), ("OBJETIVO MISION", "objective"), ("ALIADO CERCANO", "ally"), ("ENEMIGO CERCANO", "enemy")],
-+         "Objetivo: a donde la mision espera que vayas.\\nAliado o enemigo: el mas cercano.", None),
++         [("APAGADA", "off"), ("AUTO", "auto"), ("OBJETIVO MISION", "objective"), ("ALIADO CERCANO", "ally"),
++          ("ENEMIGO CERCANO", "enemy")],
++         "Auto: objetivo, enemigos que faltan o un arma.\\nObjetivo: a donde la mision espera que vayas.", None),
 +    ],
 +}
 +
  # Network Setup in a game (the pause menu's SETTINGS: port/linux/game/
  # menu_tags.c's pause_network_patch): its pages alone, without the rows that
  # would drop the game (internet play) or are for the main menu (the router,
-@@ -579,6 +858,8 @@
+@@ -579,6 +859,8 @@
  # the settings whose rows have the wider spinner (a device's name)
  WIDE_SETTINGS = {"audio.output_device", "audio.input_device", "streamer.slurs", "streamer.swearing",
                   "streamer.insults", "network.listings", "network.browser_maps", "network.browser_sort"}
@@ -1145,7 +1677,7 @@
  
  # Teamplay Options' rows of the port's (_teamplay_options_extras): the
  # gametype's FORCE TEAM SPAWNS, then the host's voice chat and vote kicks;
-@@ -928,6 +1209,23 @@
+@@ -928,6 +1210,23 @@
  
  
  
@@ -1169,7 +1701,7 @@
  def settings_files() -> dict:
      """the files of the port's screens, by their names in ce/"""
      files = {}
-@@ -935,6 +1233,7 @@
+@@ -935,6 +1234,7 @@
          files[f"{PE}/{folder}".replace("/", ".") + ".xml"] = (
              _mcc_downloads() if folder == "network_setup/mcc_downloads" else
              _controller_screen() if folder == "controller_remapping" else
@@ -2756,7 +3288,23 @@
  #include "objects/object_types.h"
  #include "render/render.h"
  #include "render/render_cameras_internal.h"
-@@ -677,6 +686,14 @@
+@@ -126,6 +135,15 @@
+ #include "units/units.h"
+ #include "network_coop.h" /* port: port/linux/game/network_coop.c */
+ #include "mcc_campaign.h" /* port: port/linux/game/mcc_campaign.c */
++#include "ai/actors.h" /* port: the guide arrow's AUTO (the enemies a step waits for) */
++#include "ai/ai_script.h"
++#include "items/weapons.h"
++#include "items/weapon_definitions.h"
++#include "interface/hud_messaging.h" /* port: the guide arrow's texts */
++#include "rasterizer/rasterizer.h"
++#include "text/draw_string.h"
++#include "text/font_group.h"
++#include "text/unicode.h"
+ 
+ /* ---------- constants */
+ 
+@@ -677,6 +695,17 @@
  	return render_type;
  }
  
@@ -2767,11 +3315,14 @@
 +blue of the scripts' markers is lost in the many blue levels); 0, the arrow's */
 +#define HUD_PORT_GUIDE_COLOR 0x00FF9020
 +static pixel32 hud_port_nav_color_override = 0;
++/* port: and the lines under its meters (SUBE / BAJA, QUEDAN 3, what to do),
++in the HUD's font, when it is on the screen; NULL: none */
++static wchar_t const *hud_port_nav_label = NULL;
 +
  void custom_render_nav_point(
  	short local_player_index,
  	real_point3d const *position_pointer,
-@@ -703,6 +720,10 @@
+@@ -703,6 +732,10 @@
  		unit_get_camera_position(local_player_get_player_index(local_player_index) == NONE ? NONE : player_get(local_player_get_player_index(local_player_index))->unit_index, &cam_pos);
  		distance = distance3d(&cam_pos, position_pointer);
  	}
@@ -2782,7 +3333,7 @@
  
  	if (distance > 15.f)
  	{
-@@ -766,7 +787,7 @@
+@@ -766,7 +799,7 @@
  			corner.x = (short)screen_position.x;
  			corner.y = (short)screen_position.y;
  			alpha = PIN(255 * fast_ftol_C(arrow->opacity), 0, 255);
@@ -2791,7 +3342,38 @@
  			rgb_temp.red *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.green *= PIN(1.f - arrow->fade, 0.f, 1.f);
  			rgb_temp.blue *= PIN(1.f - arrow->fade, 0.f, 1.f);
-@@ -810,6 +831,1148 @@
+@@ -797,6 +830,30 @@
+ 				hud_draw_numbers(local_player_index, &placement, &numbers,
+ 					fast_ftol_C(distance), fast_ftol(fmod(fabs((real)(fractional_value * distance)), fractional_value)),
+ 					0, 0, 0.f);
++
++				/* port: the guide arrow's lines, centered under it */
++				if (hud_port_nav_label && hud_port_nav_label[0])
++				{
++					long font_index = hud_get_font_index();
++
++					if (font_index!=NONE)
++					{
++						struct font_header *font = font_definition_get(font_index);
++						short line_height = font->leading_height + font->ascending_height + font->descending_height;
++						short half_width = (short)((render.camera.viewport_bounds.x1 - render.camera.viewport_bounds.x0) / 4);
++						real_argb_color label_color;
++						rectangle2d label_bounds;
++
++						label_color.alpha = alpha / 255.f;
++						label_color.rgb = rgb_temp;
++						label_bounds.x0 = corner.x - half_width;
++						label_bounds.x1 = corner.x + half_width;
++						label_bounds.y0 = (short)(corner.y + (bitmap->height * (clip->y1 - clip->y0) / 2.f) * scale + line_height);
++						label_bounds.y1 = label_bounds.y0 + 3 * line_height;
++						draw_string_set_draw_mode(font_index, NONE, 2, 0, &label_color); /* (2: centered) */
++						rasterizer_draw_unicode_string(&label_bounds, NULL, NULL, 0, hud_port_nav_label);
++					}
++				}
+ 			}
+ 		}
+ 	}
+@@ -810,6 +867,1432 @@
  	return;
  }
  
@@ -2804,15 +3386,223 @@
 +long config_integer(const char *name);
 +const char *config_string(const char *name);
 +unsigned long config_changes(void);
-+boolean hs_port_guide_find_target(real_point3d const *player, real_point3d *target);
++short hs_port_guide_find_target(real_point3d const *player, real_point3d *target, boolean ai_waits);
 +void hs_port_guide_get_target_center(real_point3d *center);
++long hs_port_guide_get_target_ai(void);
++char const *hs_port_guide_step_text(void);
 +
 +/* the objective's volume (its middle), for the route's floor */
 +static boolean hud_port_guide_target_is_volume = FALSE;
 +static real_point3d hud_port_guide_target_center;
 +
++/* what the arrow points at: AUTO's color and lines */
++enum
++{
++	_hud_port_guide_none = 0,
++	_hud_port_guide_place, /* where the level waits for the player to go */
++	_hud_port_guide_step_enemy, /* one of the enemies the level waits to die */
++	_hud_port_guide_weapon, /* a weapon with ammo, the player's are empty */
++	_hud_port_guide_enemy,
++	_hud_port_guide_ally
++};
++static short hud_port_guide_kind = _hud_port_guide_none;
++static short hud_port_guide_remaining = 0; /* (the step's enemies left) */
++static char const *hud_port_guide_text = NULL; /* (what to do at the step) */
++
 +/* the allegiance table's teams (game_allegiance.c's NUMBER_OF_GAME_TEAMS) */
 +#define GUIDE_GAME_TEAMS 10
++/* (AUTO: how near a weapon is looked for when the player's are empty) */
++#define GUIDE_WEAPON_SEARCH_DISTANCE 25.f
++
++static boolean hud_port_guide_nearest_unit(
++	long unit_index,
++	boolean enemy,
++	real_point3d *target,
++	long *target_object_index)
++{
++	struct object_iterator iterator;
++	real_point3d origin;
++	short team = object_get(unit_index)->object.owner_team_index;
++	long best_index = NONE;
++	real best_distance_squared = 0.f;
++
++	object_get_origin(unit_index, &origin);
++	object_iterator_new(&iterator, _object_mask_biped, 0);
++	while (object_iterator_next(&iterator))
++	{
++		struct object_datum *object = object_get(iterator.index);
++
++		/* (an ally is any living unit that is not an enemy: the marines are not always
++		allied to the player's team by the allegiance table, but are not its enemies) */
++		if (iterator.index!=unit_index && !TEST_FLAG(object->object.damage_flags, _object_dead_bit) &&
++			VALID_INDEX(object->object.owner_team_index, GUIDE_GAME_TEAMS) &&
++			enemy == (game_team_is_enemy(team, object->object.owner_team_index)!=FALSE))
++		{
++			real_point3d position;
++			real distance_squared;
++
++			object_get_origin(iterator.index, &position);
++			distance_squared = distance_squared3d(&origin, &position);
++			/* an ally next to the player is already in sight */
++			if ((enemy || distance_squared>16.f) && (best_index==NONE || distance_squared<best_distance_squared))
++			{
++				best_index = iterator.index;
++				best_distance_squared = distance_squared;
++			}
++		}
++	}
++
++	if (best_index!=NONE)
++	{
++		real radius;
++
++		object_get_bounding_sphere(best_index, target, &radius);
++		*target_object_index = best_index;
++	}
++
++	return best_index!=NONE;
++}
++
++/* the nearest living enemy of the AI a step waits to die (an encounter, a
++squad, a platoon), and how many of it are left */
++static boolean hud_port_guide_step_enemy(
++	long unit_index,
++	long ai_reference,
++	real_point3d *target,
++	long *target_object_index,
++	short *remaining)
++{
++	struct ai_script_actor_reference_iterator iterator;
++	struct actor_datum *actor;
++	real_point3d origin;
++	short team = object_get(unit_index)->object.owner_team_index;
++	long best_index = NONE;
++	real best_distance_squared = 0.f;
++	short count = 0, actors = 0;
++
++	object_get_origin(unit_index, &origin);
++	ai_index_actor_iterator_new(ai_reference, &iterator);
++	while ((actor = ai_index_actor_iterator_next(&iterator))!=NULL && actors++<256)
++	{
++		long index = actor->meta.unit_index;
++		struct object_datum *object = index==NONE ? NULL : object_try_and_get_and_verify_type(index, _object_mask_unit);
++
++		if (object && index!=unit_index && !TEST_FLAG(object->object.damage_flags, _object_dead_bit) &&
++			VALID_INDEX(object->object.owner_team_index, GUIDE_GAME_TEAMS) &&
++			game_team_is_enemy(team, object->object.owner_team_index))
++		{
++			real_point3d position;
++			real distance_squared;
++
++			count++;
++			object_get_origin(index, &position);
++			distance_squared = distance_squared3d(&origin, &position);
++			if (best_index==NONE || distance_squared<best_distance_squared)
++			{
++				best_index = index;
++				best_distance_squared = distance_squared;
++			}
++		}
++	}
++
++	if (best_index!=NONE)
++	{
++		real radius;
++
++		object_get_bounding_sphere(best_index, target, &radius);
++		*target_object_index = best_index;
++		*remaining = count;
++	}
++
++	return best_index!=NONE;
++}
++
++/* whether a weapon has no rounds left: its magazines empty, or its battery */
++static boolean hud_port_guide_weapon_empty(
++	long weapon_index)
++{
++	struct weapon_datum *weapon = weapon_get(weapon_index);
++	struct weapon_definition *definition = weapon_definition_get(weapon->definition_index);
++	boolean empty = TRUE;
++	short magazine_index;
++
++	if (definition->weapon.magazines.count<=0)
++		return weapon->weapon.age>=1.f;
++	for (magazine_index = 0; magazine_index<MIN(definition->weapon.magazines.count, 2); magazine_index++)
++	{
++		struct weapon_magazine const *magazine = &weapon->weapon.magazines[magazine_index];
++
++		if (magazine->rounds_loaded>0 || magazine->rounds_total>0)
++			empty = FALSE;
++	}
++
++	return empty;
++}
++
++/* whether every weapon the player carries is empty (and carries one) */
++static boolean hud_port_guide_out_of_ammo(
++	long unit_index)
++{
++	struct unit_datum *unit = unit_get(unit_index);
++	short weapon_slot, carried = 0;
++
++	for (weapon_slot = 0; weapon_slot<MAXIMUM_WEAPONS_PER_UNIT; weapon_slot++)
++	{
++		long weapon_index = unit->unit.weapon_object_indices[weapon_slot];
++
++		if (weapon_index!=NONE && object_try_and_get_and_verify_type(weapon_index, _object_mask_weapon))
++		{
++			carried++;
++			if (!hud_port_guide_weapon_empty(weapon_index))
++				return FALSE;
++		}
++	}
++
++	return carried>0;
++}
++
++/* the nearest weapon on the ground with rounds in it */
++static boolean hud_port_guide_nearest_weapon(
++	long unit_index,
++	real_point3d *target,
++	long *target_object_index)
++{
++	struct object_iterator iterator;
++	real_point3d origin;
++	long best_index = NONE;
++	real best_distance_squared = GUIDE_WEAPON_SEARCH_DISTANCE*GUIDE_WEAPON_SEARCH_DISTANCE;
++
++	object_get_origin(unit_index, &origin);
++	object_iterator_new(&iterator, _object_mask_weapon, 0);
++	while (object_iterator_next(&iterator))
++	{
++		struct object_datum *object = object_get(iterator.index);
++
++		if (object->object.parent_object_index==NONE && !hud_port_guide_weapon_empty(iterator.index))
++		{
++			real_point3d position;
++			real distance_squared;
++
++			object_get_origin(iterator.index, &position);
++			distance_squared = distance_squared3d(&origin, &position);
++			if (distance_squared<best_distance_squared)
++			{
++				best_index = iterator.index;
++				best_distance_squared = distance_squared;
++			}
++		}
++	}
++
++	if (best_index!=NONE)
++	{
++		real radius;
++
++		object_get_bounding_sphere(best_index, target, &radius);
++		*target_object_index = best_index;
++	}
++
++	return best_index!=NONE;
++}
 +
 +static boolean hud_port_guide_target(
 +	long unit_index,
@@ -2821,8 +3611,8 @@
 +{
 +	static unsigned long changes = 0;
 +	static boolean read = FALSE;
-+	static short mode = 0; /* 0 off, 1 ally, 2 enemy, 3 objective */
-+	boolean found = FALSE;
++	static short mode = 0; /* 0 off, 1 ally, 2 enemy, 3 objective, 4 auto */
++	real_point3d origin;
 +
 +	if (!read || changes!=config_changes())
 +	{
@@ -2830,66 +3620,52 @@
 +
 +		read = TRUE;
 +		changes = config_changes();
-+		mode = !strcmp(word, "ally") ? 1 : !strcmp(word, "enemy") ? 2 : !strcmp(word, "objective") ? 3 : 0;
++		mode = !strcmp(word, "ally") ? 1 : !strcmp(word, "enemy") ? 2 : !strcmp(word, "objective") ? 3 :
++			!strcmp(word, "auto") ? 4 : 0;
 +	}
 +
 +	*target_object_index = NONE;
 +	hud_port_guide_target_is_volume = FALSE;
-+	if (mode==3)
-+	{
-+		real_point3d origin;
++	hud_port_guide_kind = _hud_port_guide_none;
++	hud_port_guide_text = NULL;
++	if (mode==0)
++		return FALSE;
 +
-+		object_get_origin(unit_index, &origin);
-+		found = hs_port_guide_find_target(&origin, target);
-+		hud_port_guide_target_is_volume = found;
-+		if (found)
++	object_get_origin(unit_index, &origin);
++	/* AUTO: with every weapon empty, a weapon first */
++	if (mode==4 && hud_port_guide_out_of_ammo(unit_index) &&
++		hud_port_guide_nearest_weapon(unit_index, target, target_object_index))
++	{
++		hud_port_guide_kind = _hud_port_guide_weapon;
++	}
++	else if (mode==3 || mode==4)
++	{
++		/* (AUTO: and when no step waits for a place, the enemies a step waits to die) */
++		short what = hs_port_guide_find_target(&origin, target, mode==4);
++
++		if (what==1)
++		{
++			hud_port_guide_kind = _hud_port_guide_place;
++			hud_port_guide_target_is_volume = TRUE;
 +			hs_port_guide_get_target_center(&hud_port_guide_target_center);
++		}
++		else if (what==2 &&
++			hud_port_guide_step_enemy(unit_index, hs_port_guide_get_target_ai(), target, target_object_index,
++				&hud_port_guide_remaining))
++		{
++			hud_port_guide_kind = _hud_port_guide_step_enemy;
++		}
++		if (what!=0)
++			hud_port_guide_text = hs_port_guide_step_text();
 +	}
-+	else if (mode==1 || mode==2)
++	/* AUTO: else the nearest enemy */
++	if (hud_port_guide_kind==_hud_port_guide_none && (mode==1 || mode==2 || mode==4) &&
++		hud_port_guide_nearest_unit(unit_index, mode!=1, target, target_object_index))
 +	{
-+		struct object_iterator iterator;
-+		real_point3d origin;
-+		short team = object_get(unit_index)->object.owner_team_index;
-+		long best_index = NONE;
-+		real best_distance_squared = 0.f;
-+
-+		object_get_origin(unit_index, &origin);
-+		object_iterator_new(&iterator, _object_mask_biped, 0);
-+		while (object_iterator_next(&iterator))
-+		{
-+			struct object_datum *object = object_get(iterator.index);
-+
-+			/* (an ally is any living unit that is not an enemy: the marines are not always
-+			allied to the player's team by the allegiance table, but are not its enemies) */
-+			if (iterator.index!=unit_index && !TEST_FLAG(object->object.damage_flags, _object_dead_bit) &&
-+				VALID_INDEX(object->object.owner_team_index, GUIDE_GAME_TEAMS) &&
-+				(mode==2) == (game_team_is_enemy(team, object->object.owner_team_index)!=FALSE))
-+			{
-+				real_point3d position;
-+				real distance_squared;
-+
-+				object_get_origin(iterator.index, &position);
-+				distance_squared = distance_squared3d(&origin, &position);
-+				/* an ally next to the player is already in sight */
-+				if ((mode==2 || distance_squared>16.f) && (best_index==NONE || distance_squared<best_distance_squared))
-+				{
-+					best_index = iterator.index;
-+					best_distance_squared = distance_squared;
-+				}
-+			}
-+		}
-+
-+		if (best_index!=NONE)
-+		{
-+			real radius;
-+
-+			object_get_bounding_sphere(best_index, target, &radius);
-+			*target_object_index = best_index;
-+			found = TRUE;
-+		}
++		hud_port_guide_kind = mode==1 ? _hud_port_guide_ally : _hud_port_guide_enemy;
 +	}
 +
-+	return found;
++	return hud_port_guide_kind!=_hud_port_guide_none;
 +}
 +
 +/* port: the guide arrow's route (the GPS). The arrow does not point through the
@@ -3864,6 +4640,88 @@
 +	return;
 +}
 +
++/* port: the guide arrow's lines (custom_render_nav_point draws them under it):
++SUBE or BAJA when the target is on another floor near enough, how many of the
++step's enemies are left, a weapon for empty ones, and what to do at the step;
++what to do also goes to the HUD's messages when it changes */
++#define GUIDE_FLOOR_HEIGHT 1.2f /* (world units: a floor is about 3 meters) */
++#define GUIDE_TEXT_MESSAGE_MILLISECONDS 10000
++
++static void hud_port_guide_lines(
++	short local_player_index,
++	long unit_index,
++	real_point3d const *target,
++	wchar_t *label,
++	short label_size)
++{
++	static char const *printed_text = NULL;
++	static unsigned long printed_at = 0;
++	real_point3d origin, player_floor, goal_floor;
++	long surface_index;
++	real dz, horizontal;
++	short length = 0;
++
++	object_get_origin(unit_index, &origin);
++	if (hud_port_guide_floor(&origin, 3.f, &player_floor, &surface_index) &&
++		hud_port_guide_goal_floor(target, 0, &goal_floor, &surface_index))
++	{
++		dz = goal_floor.z-player_floor.z;
++	}
++	else
++	{
++		dz = target->z-origin.z;
++	}
++	horizontal = square_root((target->x-origin.x)*(target->x-origin.x)+(target->y-origin.y)*(target->y-origin.y));
++
++	label[0] = 0;
++#define GUIDE_LINE(...) \
++	if (length<label_size-1) \
++	{ \
++		if (length>0 && length<label_size-3) { label[length++] = '\r'; label[length++] = '\n'; } \
++		usnprintf(label+length, label_size-1-length, __VA_ARGS__); \
++		label[label_size-1] = 0; \
++		length = (short)ustrlen(label); \
++	}
++	if (fabs(dz)>=GUIDE_FLOOR_HEIGHT && fabs(dz)>=0.25f*horizontal)
++	{
++		GUIDE_LINE(dz>0.f ? L"SUBE" : L"BAJA");
++	}
++	if (hud_port_guide_kind==_hud_port_guide_step_enemy)
++	{
++		GUIDE_LINE(L"QUEDAN %d", (int)hud_port_guide_remaining);
++	}
++	else if (hud_port_guide_kind==_hud_port_guide_weapon)
++	{
++		GUIDE_LINE(L"SIN BALAS: TOMA ESTA ARMA");
++	}
++	if (hud_port_guide_text &&
++		(hud_port_guide_kind==_hud_port_guide_place || hud_port_guide_kind==_hud_port_guide_step_enemy))
++	{
++		wchar_t text[64];
++		short index;
++
++		for (index = 0; index<NUMBEROF(text)-1 && hud_port_guide_text[index]; index++)
++			text[index] = (wchar_t)(unsigned char)hud_port_guide_text[index];
++		text[index] = 0;
++		GUIDE_LINE(L"%ls", text);
++
++		if (hud_port_guide_text!=printed_text &&
++			(!printed_at || system_milliseconds()-printed_at>=GUIDE_TEXT_MESSAGE_MILLISECONDS))
++		{
++			wchar_t message[80];
++
++			usnprintf(message, NUMBEROF(message)-1, L"OBJETIVO: %ls", text);
++			message[NUMBEROF(message)-1] = 0;
++			hud_print_message(local_player_index, message);
++			printed_text = hud_port_guide_text;
++			printed_at = system_milliseconds();
++		}
++	}
++#undef GUIDE_LINE
++
++	return;
++}
++
 +/* port: when the arrow was last drawn somewhere to go (the teleport button,
 +below) */
 +static unsigned long hud_port_guide_drawn_at = 0;
@@ -3884,6 +4742,7 @@
 +		real_point3d camera_position;
 +		real_point3d point;
 +		long point_object_index;
++		wchar_t label[160];
 +
 +		unit_get_head_position(unit_index, &head_position);
 +		hud_port_guide_route_point(local_player_index, unit_index, &target, target_object_index, &point);
@@ -3917,7 +4776,13 @@
 +		}
 +		/* a corner of the route is drawn as in sight (the bumps of the ground hide
 +		it): the hidden kind is left to the target itself, when there is no way */
-+		hud_port_nav_color_override = HUD_PORT_GUIDE_COLOR;
++		/* (red for enemies, green for a weapon) */
++		hud_port_nav_color_override =
++			hud_port_guide_kind==_hud_port_guide_step_enemy || hud_port_guide_kind==_hud_port_guide_enemy ? 0x00FF4030 :
++			hud_port_guide_kind==_hud_port_guide_weapon ? 0x0040FF60 :
++			HUD_PORT_GUIDE_COLOR;
++		hud_port_guide_lines(local_player_index, unit_index, &target, label, NUMBEROF(label));
++		hud_port_nav_label = label;
 +		custom_render_nav_point(
 +			local_player_index,
 +			&point,
@@ -3928,6 +4793,7 @@
 +				0);
 +		hud_port_nav_distance_override = -1.f;
 +		hud_port_nav_color_override = 0;
++		hud_port_nav_label = NULL;
 +		/* (the Ir button only for a target in the part of the level that is
 +		loaded: one in another part, or outside the level, cannot be gone to) */
 +		if (hud_port_guide_target_reachable(&target))
@@ -3940,7 +4806,7 @@
  void hud_render_nav_points(
  	short local_player_index)
  {
-@@ -905,6 +2068,8 @@
+@@ -905,6 +2388,8 @@
  				nav_point->nav_index,
  				nav_point->screen_type);
  		}
@@ -3949,7 +4815,7 @@
  	}
  
  	game_engine_render_nav_points(local_player_index);
-@@ -1023,3 +2188,236 @@
+@@ -1023,3 +2508,236 @@
  
  	return;
  }
@@ -4188,7 +5054,7 @@
 +
 --- a/source/hs/hs_runtime.c
 +++ b/source/hs/hs_runtime.c
-@@ -3566,3 +3566,567 @@
+@@ -3566,3 +3566,761 @@
  
  	return FALSE;
  }
@@ -4222,6 +5088,10 @@
 +	short functions_read;
 +	short volume_functions[4];
 +	short player_functions[2];
++	short ai_functions[5];
++	short level; /* the route's place in hs_port_guide_routes: the level */
++	short target_order; /* the step of the last target, NONE: none */
++	long target_ai; /* the AI the last target's step waits for, NONE: a place */
 +} hs_port_guide;
 +
 +/* a syntax node, or NULL: every index is checked, as a script may be broken */
@@ -4252,12 +5122,17 @@
 +	static char const *const volume_names[4] =
 +		{ "volume_test_objects", "volume_test_object", "volume_test_objects_all", "volume_test_objects_any" };
 +	static char const *const player_names[2] = { "players", "player" };
++	/* (the counts a step waits on until the enemies there are dead) */
++	static char const *const ai_names[5] =
++		{ "ai_living_count", "ai_living_fraction", "ai_strength", "ai_nonswarm_count", "ai_swarm_count" };
 +	short index, name_index;
 +
 +	for (name_index = 0; name_index<4; name_index++)
 +		hs_port_guide.volume_functions[name_index] = NONE;
 +	for (name_index = 0; name_index<2; name_index++)
 +		hs_port_guide.player_functions[name_index] = NONE;
++	for (name_index = 0; name_index<5; name_index++)
++		hs_port_guide.ai_functions[name_index] = NONE;
 +	for (index = 0; index<hs_function_table_count; index++)
 +	{
 +		struct hs_function_definition *definition = hs_function_get(index);
@@ -4270,6 +5145,9 @@
 +			for (name_index = 0; name_index<2; name_index++)
 +				if (!strcmp(definition->name, player_names[name_index]))
 +					hs_port_guide.player_functions[name_index] = index;
++			for (name_index = 0; name_index<5; name_index++)
++				if (!strcmp(definition->name, ai_names[name_index]))
++					hs_port_guide.ai_functions[name_index] = index;
 +		}
 +	}
 +	hs_port_guide.functions_read = TRUE;
@@ -4395,6 +5273,73 @@
 +	return;
 +}
 +
++/* the AI an expression counts (ai_living_count <ai> and the like), its
++arguments and the static scripts it calls: a step that waits for the enemies of
++a place to die. NONE: none */
++static long hs_port_guide_find_ai(
++	long expression_index,
++	boolean siblings,
++	short depth,
++	short *budget)
++{
++	long result = NONE;
++
++	while (result==NONE && expression_index!=NONE && --*budget>0)
++	{
++		struct hs_syntax_node *node = hs_port_guide_node(expression_index);
++
++		if (!node)
++			break;
++		if (TEST_FLAG(node->flags, _hs_syntax_node_script_bit))
++		{
++			struct scenario *scenario = global_scenario_get();
++
++			if (depth>0 && node->script_index>=0 && node->script_index<scenario->hs_scripts.count)
++			{
++				result = hs_port_guide_find_ai(
++					TAG_BLOCK_GET_ELEMENT(&scenario->hs_scripts, node->script_index, struct hs_script)->root_expression_index,
++					FALSE, depth-1, budget);
++			}
++		}
++		else if (!TEST_FLAG(node->flags, _hs_syntax_node_primitive_bit))
++		{
++			struct hs_syntax_node *name = hs_port_guide_node(node->data);
++			short function_index;
++			boolean ai_count = FALSE;
++
++			for (function_index = 0; function_index<5; function_index++)
++				if (hs_port_guide.ai_functions[function_index]!=NONE &&
++					node->function_index==hs_port_guide.ai_functions[function_index])
++				{
++					ai_count = TRUE;
++				}
++
++			if (name && ai_count)
++			{
++				struct hs_syntax_node *ai = hs_port_guide_node(name->next_node_index);
++
++				/* (only a constant: an AI in a variable is not followed) */
++				if (ai && TEST_FLAG(ai->flags, _hs_syntax_node_primitive_bit) &&
++					!TEST_FLAG(ai->flags, _hs_syntax_node_global_bit) &&
++					ai->type==_hs_type_ai && ai->data!=NONE)
++				{
++					result = ai->data;
++				}
++			}
++			else if (name)
++			{
++				result = hs_port_guide_find_ai(name->next_node_index, TRUE, depth, budget);
++			}
++		}
++
++		if (!siblings)
++			break;
++		expression_index = node->next_node_index;
++	}
++
++	return result;
++}
++
 +static void hs_port_guide_note_volume(
 +	short trigger_volume_index,
 +	void *data)
@@ -4419,13 +5364,16 @@
 +	char const *const *route = hs_port_guide_routes;
 +	char const *const *best_route = NULL;
 +	short best_found = 0;
-+	short index;
++	short index, level = 0, best_level = NONE;
 +
 +	hs_port_guide.scripts_address = scenario->hs_scripts.address;
 +	hs_port_guide.scripts_count = scenario->hs_scripts.count;
 +	hs_port_guide.matched = FALSE;
 +	hs_port_guide.count = 0;
 +	hs_port_guide.progress = 0;
++	hs_port_guide.level = NONE;
++	hs_port_guide.target_order = NONE;
++	hs_port_guide.target_ai = NONE;
 +	for (index = 0; index<HS_PORT_GUIDE_MAXIMUM_VOLUMES; index++)
 +		hs_port_guide.volume_order[index] = NONE;
 +
@@ -4452,8 +5400,10 @@
 +		{
 +			best_route = route;
 +			best_found = found;
++			best_level = level;
 +		}
 +		route = name+1;
++		level++;
 +	}
 +
 +	if (best_route)
@@ -4480,6 +5430,7 @@
 +			}
 +		}
 +		hs_port_guide.matched = hs_port_guide.count>0;
++		hs_port_guide.level = best_level;
 +	}
 +
 +	return;
@@ -4650,19 +5601,62 @@
 +	return choice.found;
 +}
 +
-+boolean hs_port_guide_find_target(
++/* the AI a thread's sleep_until counts, if it waits for enemies to die */
++static long hs_port_guide_thread_ai(
++	struct hs_thread_datum *thread)
++{
++	struct hs_stack_frame *frame = thread->stack;
++	short frames = 0;
++	long result = NONE;
++
++	while (frame && frames++<64 &&
++		(byte *)frame>=thread->stack_data && (byte *)frame<thread->stack_data+HS_THREAD_STACK_SIZE)
++	{
++		struct hs_syntax_node *node = hs_port_guide_node(frame->expression_index);
++
++		if (node && !TEST_FLAG(node->flags, _hs_syntax_node_primitive_bit) &&
++			!TEST_FLAG(node->flags, _hs_syntax_node_script_bit) &&
++			node->function_index==_hs_function_sleep_until)
++		{
++			struct hs_syntax_node *name = hs_port_guide_node(node->data);
++			short budget = HS_PORT_GUIDE_MAXIMUM_NODES;
++
++			if (name)
++				result = hs_port_guide_find_ai(name->next_node_index, FALSE, HS_PORT_GUIDE_MAXIMUM_DEPTH, &budget);
++			break;
++		}
++		frame = frame->previous;
++	}
++
++	return result;
++}
++
++/* what the level waits for: _hs_port_guide_place (target is where), with
++ai_waits _hs_port_guide_enemies (hs_port_guide_get_target_ai: the enemies the
++step waits to die, when no step from the furthest place on waits for a place),
++or _hs_port_guide_nothing */
++enum
++{
++	_hs_port_guide_nothing = 0,
++	_hs_port_guide_place,
++	_hs_port_guide_enemies
++};
++
++short hs_port_guide_find_target(
 +	real_point3d const *player,
-+	real_point3d *target)
++	real_point3d *target,
++	boolean ai_waits)
 +{
 +	struct scenario *scenario;
 +	long threads[HS_PORT_GUIDE_MAXIMUM_SCRIPTS];
 +	long thread_index;
-+	short order, fallback = NONE;
++	short order, fallback = NONE, found_order = NONE, ai_order = NONE;
++	long ai_reference = NONE;
 +	real best_distance_squared = 0.f;
 +	boolean found = FALSE;
 +
 +	if (!hs_runtime_globals.initialized || !hs_thread_data || global_scenario_index==NONE)
-+		return FALSE;
++		return _hs_port_guide_nothing;
 +
 +	scenario = global_scenario_get();
 +	if (!hs_port_guide.functions_read)
@@ -4672,8 +5666,10 @@
 +	{
 +		hs_port_guide_match();
 +	}
++	hs_port_guide.target_order = NONE;
++	hs_port_guide.target_ai = NONE;
 +	if (!hs_port_guide.matched)
-+		return FALSE;
++		return _hs_port_guide_nothing;
 +
 +	/* a saved game loaded (the time goes back): the furthest place is found again */
 +	if (game_time_get()<hs_port_guide.last_time)
@@ -4736,7 +5732,14 @@
 +							hs_port_guide_target_center = center;
 +							best_distance_squared = distance_squared;
 +							found = TRUE;
++							found_order = order;
 +						}
++					}
++					else if (ai_waits && ai_reference==NONE)
++					{
++						ai_reference = hs_port_guide_thread_ai(thread);
++						if (ai_reference!=NONE)
++							ai_order = order;
 +					}
 +				}
 +				else if (!found)
@@ -4754,114 +5757,65 @@
 +		}
 +	}
 +
-+	return found || fallback!=NONE;
-+}
---- /dev/null
-+++ b/source/hs/hs_port_guide_routes.h
-@@ -0,0 +1,103 @@
-+/* port: the guide arrow's routes (TRUCOS, GUIA, OBJETIVO): for each campaign
-+level, the scripts that move it on as the player walks into its trigger volumes,
-+in the order the level wakes them. Only their names: the arrow reads, from each
-+script's running thread, the volume it is waiting for (hs_runtime.c,
-+hs_port_guide_find_target). A level is known by these names among its own
-+scripts. Each route ends with NULL, and the list with a second NULL */
++	if (found)
++	{
++		hs_port_guide.target_order = found_order;
++		return _hs_port_guide_place;
++	}
++	if (ai_reference!=NONE)
++	{
++		hs_port_guide.target_order = ai_order;
++		hs_port_guide.target_ai = ai_reference;
++		return _hs_port_guide_enemies;
++	}
++	if (fallback!=NONE)
++	{
++		hs_port_guide.target_order = fallback;
++		return _hs_port_guide_place;
++	}
 +
-+static char const *const hs_port_guide_routes[] =
++	return _hs_port_guide_nothing;
++}
++
++long hs_port_guide_get_target_ai(
++	void)
 +{
-+	/* a10: The Pillar of Autumn */
-+	"cont_thing", "tutorial_moving_1", "tutorial_moving_2", "tutorial_hud_shield",
-+	"tutorial_asst_kill", "tutorial_first_contact", "tutorial_weapon",
-+	"tutorial_motiontracker", "tutorial_melee", "mission_cryo_explosion",
-+	"mission_blam_burn", "mission_blam_scare", "mission_containment_1",
-+	"containment_1_slam", "mission_crossfire", "mission_bridge", "mission_shoot",
-+	"mission_cafeteria", "mission_airlock_1", "mission_flank", "mission_loop",
-+	"mission_airlock_2", "mission_knot", "mission_stairs", "mission_containment_2",
-+	"mission_lifepod_1", "mission_tunnel", "cryo_search", "mission_boom", "mission_final", NULL,
-+	/* a30: Halo */
-+	"mission_a30", "mission_lz", "mission_lz_banshee", "mission_first",
-+	"mission_first_wave_1", "mission_first_wave_2", "mission_first_defend",
-+	"mission_first_retreat", "mission_first_wave_3", "mission_first_wave_4",
-+	"mission_first_wave_5", "mission_first_wave_6", "objective_cave", "mission_cave",
-+	"mission_cliff", "mission_cliff_marine", "mission_rubble", "mission_rubble_defend",
-+	"mission_rubble_retreat", "mission_rubble_wave_2", "mission_rubble_wave_3",
-+	"mission_rubble_wave_4", "mission_rubble_wave_5", "mission_river",
-+	"mission_river_marine", "mission_river_defend", "mission_river_retreat",
-+	"mission_river_wave_2", "mission_river_wave_3", "mission_obj", "mission_mid_rubble_1",
-+	"mission_mid_cliff_1", "mission_mid_river_1", "mission_mid_cliff_2", NULL,
-+	/* a50: The Truth and Reconciliation */
-+	"mission_a50", "mission_area2", "mig_marines_area2", "mission_area3",
-+	"mig_marines_area3", "mission_area4", "ini_area4_grunts_m", "mission_area5",
-+	"ini_area5_pelican", "enc_grav_hunters", "man_marines_to_door",
-+	"mission_grav_mus_hall", "enc_grav_mus_hall", "mission_muster_bay", "ini_muster_hall",
-+	"ini_muster_hangar_hall", "mission_hangar", "ini_hangar_hall_open",
-+	"ini_hangar_pelican_b", "mission_control", "mission_prison", NULL,
-+	/* b30: The Silent Cartographer */
-+	"main_b30", "mission_beach_lz", "mission_shafta", "mission_shafta_lock",
-+	"mission_shaftb", "mission_crash", "mission_shafta_inv", "crack_arrival",
-+	"shaftb_arrival", NULL,
-+	/* b40: Assault on the Control Room */
-+	"mission_b40", "mission_a1", "mission_a_bridge", "ini_a_bridge_reins", "mission_a2",
-+	"ini_a2_top_reins", "mission_ext_a", "ini_ext_a_marines",
-+	"ini_ext_a_area_a_migration", "ini_ext_a_area_b", "mission_crevasse", "mission_ext_b",
-+	"ini_ext_b_tower", "ini_ext_b_trigger_b", "ini_ext_b_trigger_c",
-+	"ini_ext_b_b_dropship_a", "ini_pipe_cov", "mission_b3", "ini_b3_top_reins",
-+	"ini_b3_top_tree", "mission_b3_bridge", "ini_b4_bridge_cheat", "mission_b5",
-+	"mission_c_bridge", "mission_control", "ini_c_bridge_banshee", "mission_c1",
-+	"mission_ext_c", "ini_ext_c_migration", NULL,
-+	/* c10: 343 Guilty Spark */
-+	"mission_c10", "mission_swamp_a", "enc_swamp1", "enc_swamp2", "inc_log", "inc3",
-+	"inc4", "inc5", "inc6", "inc7", "mission_int_a", "ini_crazy_marine",
-+	"mission_control", "ini_int_b_lab_b", "ini_int_b_hall_d", "ini_int_a_hall_b",
-+	"ini_int_a_lift_a", "ini_int_a_lift_b", "mission_int_b", "ini_int_c_lab_a",
-+	"ini_int_c_hall_a_labs", "ini_int_c_hall_b_labs", "ini_int_d_lift_c",
-+	"ini_int_d_hall_d_labs", "ini_int_d_hall_e_labs", "ini_int_d_hall_f_labs",
-+	"ini_int_d_hall_g_labs", "mission_swamp_b", "ini_swamp_b_marines", NULL,
-+	/* c20: The Library */
-+	"section1", "enc1", "enc2", "enc3", "enc4", "enc5", "enc6", "enc7", "enc8", "enc1_9",
-+	"section2", "enc2_0", "enc2_1", "enc2_2", "enc2_3", "enc2_4", "enc2_5", "enc2_6",
-+	"enc2_8", "enc2_10", "enc2_11", "enc2_12", "enc2_9", "enc2_7", "section3", "enc3_1",
-+	"enc3_2", "enc3_3", "enc3_4", "monitor2_4", "enc3_5", "enc3_6", "monitor2_5",
-+	"monitor2_6", "monitor2_7", "monitor2_8", "monitor2_9", "monitor2_10", "monitor2_11",
-+	"monitor2_1", "monitor2_2", "section4", "enc4_0", "enc4_1", "enc4_2", "enc4_3",
-+	"enc4_4", "enc4_6", "enc4_7", "enc4_8", "enc4_5", "section5", "enc5_0", "enc5_1",
-+	"enc5_2", "enc5_3", "enc5_4", "enc5_5", "monitor3_4", "monitor3_5", "monitor3_6",
-+	"monitor3_7", "enc5_6", "monitor3_1", "monitor3_2", "section6", "enc6_1", "enc6_2",
-+	"enc6_3", "enc6_4", "monitor3_9", "enc6_5", "enc6_6", "enc6_7", "enc6_8", "enc7_1",
-+	"enc7_3", "enc7_4", "enc7_5", "enc7_6", "enc7_7", "enc7_8", "enc7_9", "enc7_10",
-+	"enc7_12", "monitor4_4", "monitor4_3", "monitor4_1", "monitor1_2", "monitor1_3",
-+	"monitor1_4", "monitor1_5", "monitor1_6", "monitor1_7", "monitor1_9", "monitor1_10",
-+	"monitor1_12", "monitor1_13", "monitor1_14", "monitor1_15", "monitor1_9b", NULL,
-+	/* c40: Two Betrayals */
-+	"e3_a", "c3_base_tier_2", "e5_a", "e6_a", "e7_b", "e7_c", "e8_a", "e8_b", "e20_a",
-+	"e21_a", "e21_b", "e22_a", "e30_a", "e31_b", "e31_c", "e31_d", "e33_a", "e33_b",
-+	"e34_a", "e37_a", "e38_a", "e39_a", "e40_a", "banshee_alt", "e43_a", "e43_b", "e43_c",
-+	"e44_a", "e46_speech", "e46_a", "e48_a", "e50_a", "e51_a", "second_lp", "e52_a",
-+	"e52_c", "e53_a", "c40_230_240_250", "waypoint_off", "e57_a", "e59_a", "e59_b",
-+	"e59_c", "e60_a", "e61_a", "e62_a", "e62_b", "e65_a", "last_waypoint_off", "e66_a",
-+	"end", NULL,
-+	/* d20: Keyes */
-+	"section1", "enc1_1", "enc1_2", "enc1_4", "enc1_5", "section3", "enc3_1", "enc3_2",
-+	"enc3_3", "enc3_4", "enc3_5", "enc3_6", "enc3_7", "enc3_8", "enc3_9", "section4",
-+	"enc4_2", "enc4_3", "enc4_4", "enc4_5", "enc4_6", "enc4_7", "enc4_9", "enc4_8",
-+	"section5", "enc5_1", "enc5_2", "enc5_3", "enc5_4", "enc5_5", "enc5_6", "enc5_7",
-+	"section6", "enc6_1", "enc6_2", "enc6_3", "enc6_4", "section7", "enc7_1", "enc7_2",
-+	"enc7_3", "enc7_6", "enc7_5", NULL,
-+	/* d40: The Maw */
-+	"section1", "enc1_1", "enc1_2", "enc1_3", "enc1_4", "section2", "enc2_1", "enc2_2",
-+	"enc2_4", "enc2_5", "enc2_6", "enc2_7", "section3", "enc3_1", "enc3_2", "enc3_3",
-+	"enc3_4", "enc3_5", "enc3_6", "section4", "enc4_1", "enc4_3", "section5", "enc5_1",
-+	"enc5_1_s12", "enc5_2", "enc5_3", "section6", "enc6_0", "enc6_0_1", "enc6_1",
-+	"enc6_1_1", "enc6_1_2", "enc6_1_3", "enc6_1_4", "enc6_1_5", "enc6_1_6", "enc6_1_7",
-+	"enc6_1_8", "enc6_1_9", "enc6_2", "enc6_2_0", "enc6_2_1", "enc6_2_2", "enc6_2_3",
-+	"enc6_2_4", "enc6_2_5", "enc6_2_6", "enc6_2_7", "enc6_2_8", "enc6_3", "enc6_3_1",
-+	"enc6_3_2", "enc6_3_3", "enc6_3_4", "enc6_4", "enc6_4_1", "enc6_4_2", "enc6_4_3",
-+	"enc6_4_4", "enc6_4_5", "enc6_4_6", "enc6_4_7", "enc6_4_8", "enc6_5", "enc6_5_1",
-+	"enc6_5_2", "enc6_5_3", "enc6_5_4", "enc6_5_5", "enc6_5_6", "enc6_5_7", "enc6_5_8",
-+	"enc6_6", "enc6_6_1", "enc6_7", "enc6_7_1", "enc6_7_2", "enc6_8", "enc6_8_1",
-+	"enc6_8_2", "enc6_8_3", "enc6_8_4", "enc6_8_5", "enc6_8_6", "enc6_8_7", "enc6_8_8",
-+	"enc6_9_1", "section7", "enc7_1", "enc7_7", NULL,
-+	NULL
-+};
++	return hs_port_guide.target_ai;
++}
++
++/* what to do at the last target's step, in the game's font (without accents),
++or NULL: the text of its script in hs_port_guide_texts, else of the nearest
++step before it that has one */
++char const *hs_port_guide_step_text(
++	void)
++{
++	static short last_level = NONE, last_order = NONE;
++	static char const *last_text = NULL;
++	short order;
++
++	if (!hs_port_guide.matched || hs_port_guide.level==NONE || hs_port_guide.target_order==NONE)
++		return NULL;
++	if (hs_port_guide.level==last_level && hs_port_guide.target_order==last_order)
++		return last_text;
++
++	last_level = hs_port_guide.level;
++	last_order = hs_port_guide.target_order;
++	last_text = NULL;
++	for (order = MIN(hs_port_guide.target_order, hs_port_guide.count-1); order>=0 && !last_text; order--)
++	{
++		char const *name = hs_port_guide_script_name(hs_port_guide.script_indices[order]);
++		struct hs_port_guide_text const *text;
++
++		for (text = hs_port_guide_texts; text->script; text++)
++			if (text->level==hs_port_guide.level && !strcmp(text->script, name))
++			{
++				last_text = text->text;
++				break;
++			}
++	}
++
++	return last_text;
++}
 --- a/source/interface/hud.c
 +++ b/source/interface/hud.c
 @@ -88,6 +88,7 @@
@@ -5724,320 +6678,6 @@
 +		light_port_flashlight_count = 0;
 +	}
 +}
---- /dev/null
-+++ b/port/linux/game/third_person.c
-@@ -0,0 +1,277 @@
-+/*
-+THIRD_PERSON.C
-+
-+The view over the shoulder, on foot: the following camera
-+(following_camera.c) pivoting a little right of (or left of, or above) the
-+player's eye, back a distance. The player's aim, and the shot, stay the
-+eye's (first_person_camera_deterministic, as aim assist's), so nothing about
-+the game or the network changes: the view alone is turned to the point the
-+eye's line hits, which puts the screen's middle there.
-+
-+Whether a player sees it: in a game of their own (the campaign, or a game
-+not on a network: as the cheats, cheats.c), their setting (TRUCOS, MAS
-+TRUCOS: cheats.third_person, cheats.third_person_shoulder,
-+cheats.third_person_distance). A scope's zoom is first person: the view
-+comes back once the zoom is let go.
-+
-+From Halo Content Evolved's (Watanoge/halo-content-evolved,
-+port/linux/game/third_person.c, GNU AGPL v3), without its game modes' rules.
-+*/
-+
-+#include "cseries.h"
-+#include "third_person.h"
-+#include "camera/director.h"
-+#include "camera/observer.h"
-+#include "camera/static_camera.h"
-+#include "cutscene/cinematics.h"
-+#include "game/game.h"
-+#include "game/players.h"
-+#include "objects/objects.h"
-+#include "physics/collisions.h"
-+#include "units/units.h"
-+
-+#include <string.h>
-+
-+int config_boolean(const char *name);
-+const char *config_string(const char *name);
-+unsigned long config_changes(void);
-+/* network_game_globals.c's */
-+boolean network_game_distributed_client(void);
-+
-+/* the shoulder: how far right (or left) of the eye, and above it; a view
-+from the middle is higher, to see over the head */
-+#define THIRD_PERSON_SIDE 0.42f
-+#define THIRD_PERSON_RISE 0.08f
-+#define THIRD_PERSON_CENTER_RISE 0.3f
-+/* how far short of a wall the shoulder stops */
-+#define THIRD_PERSON_WALL_MARGIN 0.15f
-+/* how far the eye's line is followed, and the nearest point the view turns
-+to (closer, it turns too far) */
-+#define THIRD_PERSON_AIM_RANGE 200.f
-+#define THIRD_PERSON_AIM_NEAREST 1.f
-+/* a tick's share of the way to the shoulder chosen, and to what the line hits */
-+#define THIRD_PERSON_SIDE_GLIDE 0.25f
-+#define THIRD_PERSON_AIM_GLIDE 0.35f
-+
-+#define THIRD_PERSON_WALL_FLAGS (FLAG(_collision_test_front_facing_surfaces_bit) | \
-+	FLAG(_collision_test_structure_bit) | FLAG(_collision_test_objects_bit) | \
-+	FLAG(_collision_test_objects_scenery_bit))
-+
-+enum
-+{
-+	_shoulder_right = 0,
-+	_shoulder_left,
-+	_shoulder_center
-+};
-+
-+/* (in the order of game.third_person_distance's values: normal, near, far) */
-+static real const third_person_distances[] = { 1.9f, 1.3f, 2.7f };
-+
-+static struct
-+{
-+	unsigned long read_at;
-+	boolean on;
-+	short shoulder;
-+	short distance;
-+} settings = { (unsigned long)-1 };
-+
-+/* each local player's view: where it is between the shoulders (-1 left, 1
-+right), and how far along the eye's line it looks, each gliding a tick at a
-+time; the eye and its line as of the last command */
-+static struct
-+{
-+	boolean valid;
-+	long commanded_at;
-+	long glided_at;
-+	long unit_index;
-+	real side;
-+	real aim_distance;
-+	real_point3d eye;
-+	real_vector3d forward;
-+} views[MAXIMUM_LOCAL_PLAYERS];
-+
-+static void settings_read(void)
-+{
-+	char const *value;
-+
-+	if (settings.read_at == config_changes())
-+		return;
-+	settings.read_at = config_changes();
-+	settings.on = config_boolean("cheats.third_person") != 0;
-+	value = config_string("cheats.third_person_shoulder");
-+	settings.shoulder = value && !strcmp(value, "left") ? _shoulder_left :
-+		value && !strcmp(value, "center") ? _shoulder_center : _shoulder_right;
-+	value = config_string("cheats.third_person_distance");
-+	settings.distance = value && !strcmp(value, "near") ? 1 : value && !strcmp(value, "far") ? 2 : 0;
-+}
-+
-+boolean third_person_active(short local_player_index)
-+{
-+	long player_index, unit_index;
-+	struct unit_datum *unit;
-+
-+	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
-+		cinematic_in_progress() || (director_camera_scripted && *director_camera_scripted))
-+		return FALSE;
-+	player_index = local_player_get_player_index(local_player_index);
-+	if (player_index == NONE)
-+		return FALSE;
-+	unit_index = player_control_get_unit_index(local_player_index);
-+	if (unit_index == NONE || player_get(player_index)->unit_index != unit_index)
-+		return FALSE;
-+	unit = unit_try_and_get(unit_index);
-+	if (!unit || TEST_FLAG(unit->object.damage_flags, _object_dead_bit) ||
-+		unit->object.parent_object_index != NONE ||
-+		unit->unit.current_zoom_level != NONE || unit->unit.desired_zoom_level != NONE)
-+		return FALSE;
-+	/* (a game of the player's own, as the cheats: none in another's) */
-+	if (game_connection() != _game_connection_local || network_game_distributed_client())
-+		return FALSE;
-+	settings_read();
-+	return settings.on;
-+}
-+
-+/* the view of this tick's command, still over the shoulder */
-+static boolean third_person_viewing(short local_player_index)
-+{
-+	return local_player_index >= 0 && local_player_index < MAXIMUM_LOCAL_PLAYERS &&
-+		views[local_player_index].valid && views[local_player_index].commanded_at == game_time_get() &&
-+		director_get_perspective(local_player_index) == _director_perspective_third_person &&
-+		third_person_active(local_player_index);
-+}
-+
-+void third_person_command(short local_player_index, real_euler_angles2d const *facing,
-+	struct camera_command *command)
-+{
-+	long unit_index = player_control_get_unit_index(local_player_index);
-+	real side;
-+	real distance = THIRD_PERSON_AIM_RANGE;
-+	real_vector3d ray;
-+	struct collision_result collision;
-+
-+	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS || unit_index == NONE)
-+		return;
-+	settings_read();
-+	side = settings.shoulder == _shoulder_left ? -1.f : settings.shoulder == _shoulder_center ? 0.f : 1.f;
-+
-+	/* what the eye's line hits, as a shot would */
-+	unit_get_camera_position(unit_index, &views[local_player_index].eye);
-+	vector3d_from_euler_angles2d(&views[local_player_index].forward, facing);
-+	scale_vector3d(&views[local_player_index].forward, THIRD_PERSON_AIM_RANGE, &ray);
-+	if (collision_test_vector(_collision_test_for_projectiles_flags, &views[local_player_index].eye, &ray,
-+		unit_index, &collision))
-+	{
-+		distance = MAX(collision.t * THIRD_PERSON_AIM_RANGE, THIRD_PERSON_AIM_NEAREST);
-+	}
-+
-+	/* (afresh for another unit: a spawn) */
-+	if (!views[local_player_index].valid || views[local_player_index].unit_index != unit_index)
-+	{
-+		views[local_player_index].side = side;
-+		views[local_player_index].aim_distance = distance;
-+		views[local_player_index].glided_at = game_time_get();
-+	}
-+	else if (views[local_player_index].glided_at != game_time_get())
-+	{
-+		views[local_player_index].side += (side - views[local_player_index].side) * THIRD_PERSON_SIDE_GLIDE;
-+		views[local_player_index].aim_distance +=
-+			(distance - views[local_player_index].aim_distance) * THIRD_PERSON_AIM_GLIDE;
-+		views[local_player_index].glided_at = game_time_get();
-+	}
-+	views[local_player_index].valid = TRUE;
-+	views[local_player_index].unit_index = unit_index;
-+	views[local_player_index].commanded_at = game_time_get();
-+
-+	/* (the observer's offset: i forward, j right, k up of the eye) */
-+	side = views[local_player_index].side;
-+	command->offset.i = 0.f;
-+	command->offset.j = side * THIRD_PERSON_SIDE;
-+	command->offset.k = THIRD_PERSON_RISE + (1.f - (side < 0.f ? -side : side)) *
-+		(THIRD_PERSON_CENTER_RISE - THIRD_PERSON_RISE);
-+	command->depth = third_person_distances[settings.distance];
-+}
-+
-+void third_person_clip_focus(short local_player_index, real_point3d const *eye, real_point3d *focus)
-+{
-+	real_vector3d vector;
-+	real length;
-+	struct collision_result collision;
-+
-+	if (!third_person_viewing(local_player_index))
-+		return;
-+	vector_from_points3d(eye, focus, &vector);
-+	length = magnitude3d(&vector);
-+	if (length < 0.01f)
-+		return;
-+	if (collision_test_vector(THIRD_PERSON_WALL_FLAGS, eye, &vector, views[local_player_index].unit_index,
-+		&collision))
-+	{
-+		point_from_line3d(eye, &vector, MAX(collision.t - THIRD_PERSON_WALL_MARGIN / length, 0.f), focus);
-+	}
-+}
-+
-+/* (a vector turned by the turn taking from to to: Rodrigues's rotation) */
-+static void third_person_turn(real_vector3d const *axis, real cosine, real sine, real_vector3d const *vector,
-+	real_vector3d *result)
-+{
-+	real_vector3d across;
-+	real along = dot_product3d(axis, vector) * (1.f - cosine);
-+
-+	cross_product3d(axis, vector, &across);
-+	result->i = vector->i * cosine + across.i * sine + axis->i * along;
-+	result->j = vector->j * cosine + across.j * sine + axis->j * along;
-+	result->k = vector->k * cosine + across.k * sine + axis->k * along;
-+}
-+
-+boolean third_person_direct(short local_player_index, struct observer_result const *camera,
-+	struct observer_result *result)
-+{
-+	real_vector3d now;
-+	real_vector3d axis;
-+	real_vector3d offset;
-+	real_vector3d turned;
-+	real cosine, sine;
-+
-+	if (!camera || !third_person_viewing(local_player_index) || director_inhibited_facing(local_player_index))
-+		return FALSE;
-+	player_control_get_facing_direction(local_player_index, &now);
-+	if (normalize3d(&now) < 0.5f)
-+		return FALSE;
-+	cross_product3d(&views[local_player_index].forward, &now, &axis);
-+	sine = normalize3d(&axis);
-+	cosine = dot_product3d(&views[local_player_index].forward, &now);
-+	/* (no turn since the tick, or one too large to be a frame's) */
-+	if (sine < 0.0001f || cosine < 0.5f)
-+		return FALSE;
-+	*result = *camera;
-+	vector_from_points3d(&views[local_player_index].eye, &camera->position, &offset);
-+	third_person_turn(&axis, cosine, sine, &offset, &turned);
-+	result->position.x = views[local_player_index].eye.x + turned.i;
-+	result->position.y = views[local_player_index].eye.y + turned.j;
-+	result->position.z = views[local_player_index].eye.z + turned.k;
-+	third_person_turn(&axis, cosine, sine, &camera->forward, &result->forward);
-+	normalize3d(&result->forward);
-+	observer_up_from_forward(&result->forward, &result->up);
-+	return TRUE;
-+}
-+
-+void third_person_converge(short local_player_index, struct observer_result *result)
-+{
-+	real_point3d target;
-+	real_vector3d forward;
-+
-+	if (!third_person_viewing(local_player_index))
-+		return;
-+	point_from_line3d(&views[local_player_index].eye, &views[local_player_index].forward,
-+		views[local_player_index].aim_distance, &target);
-+	vector_from_points3d(&result->position, &target, &forward);
-+	/* (not to a point beside or behind the view: the camera pressed
-+	against a wall, its line hitting one at the eye) */
-+	if (normalize3d(&forward) < THIRD_PERSON_AIM_NEAREST * 0.5f ||
-+		dot_product3d(&forward, &views[local_player_index].forward) < 0.7f)
-+	{
-+		return;
-+	}
-+	result->forward = forward;
-+	observer_up_from_forward(&result->forward, &result->up);
-+}
---- /dev/null
-+++ b/port/linux/game/third_person.h
-@@ -0,0 +1,31 @@
-+/* The view over the shoulder, on foot (third_person.c): TRUCOS, MAS TRUCOS,
-+TERCERA PERSONA (from Halo Content Evolved's, by Watanoge, AGPL). */
-+#ifndef THIRD_PERSON_H
-+#define THIRD_PERSON_H
-+
-+#include "math/real_math.h"
-+
-+struct camera_command;
-+struct observer_result;
-+
-+/* the local player's view is over their shoulder: on foot, alive, not
-+scoped, in a game of their own, and their setting has it so */
-+boolean third_person_active(short local_player_index);
-+/* following_camera_update's command for it: the shoulder, the distance
-+back, and what the eye's line hits, which the view turns to */
-+void third_person_command(short local_player_index, real_euler_angles2d const *facing,
-+	struct camera_command *command);
-+/* (observer_postcheck) the shoulder kept out of walls: focus, offset from the
-+eye, brought back to where the line from the eye meets one */
-+void third_person_clip_focus(short local_player_index, real_point3d const *eye, real_point3d *focus);
-+/* (observer_postcheck) the view turned to what the eye's line hits, so that
-+the screen's middle is where the shot goes */
-+void third_person_converge(short local_player_index, struct observer_result *result);
-+/* port (trucos): the frame's view (render_interpolation.c), the camera turned
-+about the eye by how far the player has turned since the tick, as first
-+person's direct camera does: the view turns the frame the player turns.
-+Whether it did (result then holds it). */
-+boolean third_person_direct(short local_player_index, struct observer_result const *camera,
-+	struct observer_result *result);
-+
-+#endif
 --- a/source/camera/director.c
 +++ b/source/camera/director.c
 @@ -129,6 +129,7 @@
@@ -11029,532 +11669,317 @@
 +
 +#endif /* __TAG_PACK_H */
 --- /dev/null
-+++ b/port/linux/src/port_tag_packs.c
-@@ -0,0 +1,461 @@
++++ b/port/linux/game/third_person.c
+@@ -0,0 +1,277 @@
 +/*
-+PORT_TAG_PACKS.C
++THIRD_PERSON.C
 +
-+The tag packs' manifests (port_tag_packs.h), read once from the files
-+tools/embed_assets.py embedded from port/assets/tag_packs. Each is
++The view over the shoulder, on foot: the following camera
++(following_camera.c) pivoting a little right of (or left of, or above) the
++player's eye, back a distance. The player's aim, and the shot, stay the
++eye's (first_person_camera_deterministic, as aim assist's), so nothing about
++the game or the network changes: the view alone is turned to the point the
++eye's line hits, which puts the screen's middle there.
 +
-+	name = "<owner>_<what>"           its file's name, and maps/<name>.pack
-+	version = 1                       raised by hand when the keep rules
-+	                                  mean something else than they say
-+	legacy_file_names = ["old.pack"]  renamed to the pack's at start-up
-+	maps = ["c40"]                    map files, at most 32, 31 letters
-+	minimum_bitmaps = 1               a map with fewer is not read right
-+	minimum_sounds = 0
-+	wanted = ["always"]               or "setting:<key>", "condition:<name>"
++Whether a player sees it: in a game of their own (the campaign, or a game
++not on a network: as the cheats, cheats.c), their setting (TRUCOS, MAS
++TRUCOS: cheats.third_person, cheats.third_person_shoulder,
++cheats.third_person_distance). A scope's zoom is first person: the view
++comes back once the zoom is let go.
 +
-+	[keep]                            whose pixels and samples are kept,
-+	include_contains = ["flood"]      by the tag's name (any case): when
-+	include_prefixes = ["effects\\"]  there are includes, one of them;
-+	exclude_contains = []             and none of the excludes
-+	exclude_bitmap_prefixes = []
-+	exclude_sound_prefixes = []
-+
-+	[text]                            the main menu's words for it
-+	notice = "..."
-+	building = "..."
-+	ready = "..."
-+	failed = "..."
-+
-+What a pack holds is hashed (port_tag_packs_content) from its version, maps,
-+minimums and keep rules, in that order, each lower-cased: tools/tag_pack.py
-+hashes the same text, so a pack it writes is one the game reads.
++From Halo Content Evolved's (Watanoge/halo-content-evolved,
++port/linux/game/third_person.c, GNU AGPL v3), without its game modes' rules.
 +*/
 +
-+#include "platform.h"
-+#include "port_tag_packs.h"
-+#include "tomlc17.h"
++#include "cseries.h"
++#include "third_person.h"
++#include "camera/director.h"
++#include "camera/observer.h"
++#include "camera/static_camera.h"
++#include "cutscene/cinematics.h"
++#include "game/game.h"
++#include "game/players.h"
++#include "objects/objects.h"
++#include "physics/collisions.h"
++#include "units/units.h"
 +
-+#include <ctype.h>
-+#include <stdio.h>
-+#include <stdlib.h>
 +#include <string.h>
 +
-+#define MAXIMUM_TAG_PACKS 32
-+#define MAXIMUM_NAME_LENGTH 64
-+#define MAXIMUM_LEGACY 4
-+#define MAXIMUM_WANTED 8
-+#define MAXIMUM_RULES 32
-+#define MAXIMUM_RULE_LENGTH 128
-+#define MAXIMUM_TEXT_LENGTH 256
++int config_boolean(const char *name);
++const char *config_string(const char *name);
++unsigned long config_changes(void);
++/* network_game_globals.c's */
++boolean network_game_distributed_client(void);
++
++/* the shoulder: how far right (or left) of the eye, and above it; a view
++from the middle is higher, to see over the head */
++#define THIRD_PERSON_SIDE 0.42f
++#define THIRD_PERSON_RISE 0.08f
++#define THIRD_PERSON_CENTER_RISE 0.3f
++/* how far short of a wall the shoulder stops */
++#define THIRD_PERSON_WALL_MARGIN 0.15f
++/* how far the eye's line is followed, and the nearest point the view turns
++to (closer, it turns too far) */
++#define THIRD_PERSON_AIM_RANGE 200.f
++#define THIRD_PERSON_AIM_NEAREST 1.f
++/* a tick's share of the way to the shoulder chosen, and to what the line hits */
++#define THIRD_PERSON_SIDE_GLIDE 0.25f
++#define THIRD_PERSON_AIM_GLIDE 0.35f
++
++#define THIRD_PERSON_WALL_FLAGS (FLAG(_collision_test_front_facing_surfaces_bit) | \
++	FLAG(_collision_test_structure_bit) | FLAG(_collision_test_objects_bit) | \
++	FLAG(_collision_test_objects_scenery_bit))
 +
 +enum
 +{
-+	RULE_INCLUDE_CONTAINS,
-+	RULE_INCLUDE_PREFIXES,
-+	RULE_EXCLUDE_CONTAINS,
-+	RULE_EXCLUDE_BITMAP_PREFIXES,
-+	RULE_EXCLUDE_SOUND_PREFIXES,
-+	RULE_LISTS
++	_shoulder_right = 0,
++	_shoulder_left,
++	_shoulder_center
 +};
 +
-+static const char *const rule_keys[RULE_LISTS] =
++/* (in the order of game.third_person_distance's values: normal, near, far) */
++static real const third_person_distances[] = { 1.9f, 1.3f, 2.7f };
++
++static struct
 +{
-+	"include_contains", "include_prefixes", "exclude_contains", "exclude_bitmap_prefixes", "exclude_sound_prefixes",
-+};
++	unsigned long read_at;
++	boolean on;
++	short shoulder;
++	short distance;
++} settings = { (unsigned long)-1 };
 +
-+enum
++/* each local player's view: where it is between the shoulders (-1 left, 1
++right), and how far along the eye's line it looks, each gliding a tick at a
++time; the eye and its line as of the last command */
++static struct
 +{
-+	TEXT_NOTICE,
-+	TEXT_BUILDING,
-+	TEXT_READY,
-+	TEXT_FAILED,
-+	TEXTS
-+};
++	boolean valid;
++	long commanded_at;
++	long glided_at;
++	long unit_index;
++	real side;
++	real aim_distance;
++	real_point3d eye;
++	real_vector3d forward;
++} views[MAXIMUM_LOCAL_PLAYERS];
 +
-+static const char *const text_keys[TEXTS] = { "notice", "building", "ready", "failed" };
-+
-+struct rule_list
++static void settings_read(void)
 +{
-+	char rules[MAXIMUM_RULES][MAXIMUM_RULE_LENGTH];
-+	long count;
-+};
++	char const *value;
 +
-+struct tag_pack
-+{
-+	char name[MAXIMUM_NAME_LENGTH];
-+	long version;
-+	char maps[PORT_TAG_PACK_MAPS][PORT_TAG_PACK_MAP_LENGTH];
-+	long map_count;
-+	char legacy[MAXIMUM_LEGACY][MAXIMUM_NAME_LENGTH + 8];
-+	long legacy_count;
-+	char wanted[MAXIMUM_WANTED][MAXIMUM_NAME_LENGTH];
-+	long wanted_count;
-+	long minimum_bitmaps;
-+	long minimum_sounds;
-+	struct rule_list rules[RULE_LISTS];
-+	char texts[TEXTS][MAXIMUM_TEXT_LENGTH];
-+	unsigned long content;
-+};
-+
-+static struct tag_pack *packs;
-+static long pack_count;
-+static int packs_read;
-+
-+/* ---------- reading */
-+
-+static void lower_copy(char *destination, size_t size, const char *source)
-+{
-+	size_t index;
-+
-+	for (index = 0; source[index] && index + 1 < size; index++)
-+		destination[index] = (char)tolower((unsigned char)source[index]);
-+	destination[index] = 0;
-+}
-+
-+static int name_usable(const char *name)
-+{
-+	const char *at;
-+
-+	if (!name[0] || !strchr(name, '_') || name[0] == '_')
-+		return 0;
-+	for (at = name; *at; at++)
-+	{
-+		if (!(*at >= 'a' && *at <= 'z') && !(*at >= '0' && *at <= '9') && *at != '_')
-+			return 0;
-+	}
-+	return 1;
-+}
-+
-+/* the strings of an array key, lower-cased, at most `maximum` of `length`;
-+how many, or -1 when the key is there and is not an array of strings */
-+static long strings_read(toml_datum_t table, const char *key, const char *path, char *into, long maximum,
-+	size_t length, int lower)
-+{
-+	toml_datum_t value = toml_get(table, key);
-+	long count = 0;
-+	int index;
-+
-+	if (value.type == TOML_UNKNOWN)
-+		return 0;
-+	if (value.type != TOML_ARRAY)
-+	{
-+		platform_log("tag packs: %s line %d: %s is not a list", path, value.lineno, key);
-+		return -1;
-+	}
-+	for (index = 0; index < value.u.arr.size; index++)
-+	{
-+		toml_datum_t item = value.u.arr.elem[index];
-+
-+		if (item.type != TOML_STRING || !item.u.s[0] || strlen(item.u.s) >= length)
-+		{
-+			platform_log("tag packs: %s line %d: an entry of %s is not a string of at most %u letters", path,
-+				item.lineno, key, (unsigned)length - 1);
-+			return -1;
-+		}
-+		if (count >= maximum)
-+		{
-+			platform_log("tag packs: %s: more than %ld in %s", path, maximum, key);
-+			return -1;
-+		}
-+		if (lower)
-+			lower_copy(into + count * length, length, item.u.s);
-+		else
-+			snprintf(into + count * length, length, "%s", item.u.s);
-+		count++;
-+	}
-+	return count;
-+}
-+
-+static long integer_read(toml_datum_t table, const char *key, long otherwise)
-+{
-+	toml_datum_t value = toml_get(table, key);
-+
-+	return value.type == TOML_INT64 && value.u.int64 >= 0 && value.u.int64 < 0x7FFFFFFF ? (long)value.u.int64 :
-+		otherwise;
-+}
-+
-+/* ---------- what a pack holds */
-+
-+static unsigned long hash_text(unsigned long hash, const char *text)
-+{
-+	for (; *text; text++)
-+		hash = ((hash ^ (unsigned char)*text) * 16777619UL) & 0xFFFFFFFFUL;
-+	return hash;
-+}
-+
-+static unsigned long content_hash(const struct tag_pack *pack)
-+{
-+	char line[MAXIMUM_RULE_LENGTH + 64];
-+	unsigned long hash = 0x811C9DC5UL;
-+	long index;
-+	int list;
-+
-+	snprintf(line, sizeof(line), "rpak2\nversion=%ld\n", pack->version);
-+	hash = hash_text(hash, line);
-+	for (index = 0; index < pack->map_count; index++)
-+	{
-+		snprintf(line, sizeof(line), "map=%s\n", pack->maps[index]);
-+		hash = hash_text(hash, line);
-+	}
-+	snprintf(line, sizeof(line), "minimum_bitmaps=%ld\nminimum_sounds=%ld\n", pack->minimum_bitmaps,
-+		pack->minimum_sounds);
-+	hash = hash_text(hash, line);
-+	for (list = 0; list < RULE_LISTS; list++)
-+	{
-+		for (index = 0; index < pack->rules[list].count; index++)
-+		{
-+			snprintf(line, sizeof(line), "%s=%s\n", rule_keys[list], pack->rules[list].rules[index]);
-+			hash = hash_text(hash, line);
-+		}
-+	}
-+	/* (never 0, which a pack's header would read as none) */
-+	return hash ? hash : 1;
-+}
-+
-+/* a manifest; 0 when it is not one */
-+static int pack_read(struct tag_pack *pack, const char *path, const char *text, size_t size)
-+{
-+	char stem[MAXIMUM_NAME_LENGTH];
-+	const char *leaf = strrchr(path, '/');
-+	toml_result_t result;
-+	toml_datum_t value;
-+	toml_datum_t table;
-+	size_t length;
-+	int index;
-+	int good = 1;
-+
-+	memset(pack, 0, sizeof(*pack));
-+	leaf = leaf ? leaf + 1 : path;
-+	length = strlen(leaf);
-+	if (length < 6 || strcmp(leaf + length - 5, ".toml") || length - 5 >= sizeof(stem))
-+		return 0;
-+	memcpy(stem, leaf, length - 5);
-+	stem[length - 5] = 0;
-+	result = toml_parse(text, (int)size);
-+	if (!result.ok)
-+	{
-+		platform_log("tag packs: %s: %s; it is left out", path, result.errmsg);
-+		toml_free(result);
-+		return 0;
-+	}
-+	value = toml_get(result.toptab, "name");
-+	if (value.type != TOML_STRING || strcmp(value.u.s, stem) || !name_usable(value.u.s))
-+	{
-+		platform_log("tag packs: %s: its name is not its file's, of lower-case letters, digits and _, with "
-+			"its owner's first (owner_what); it is left out", path);
-+		toml_free(result);
-+		return 0;
-+	}
-+	snprintf(pack->name, sizeof(pack->name), "%s", value.u.s);
-+	pack->version = integer_read(result.toptab, "version", 1);
-+	pack->minimum_bitmaps = integer_read(result.toptab, "minimum_bitmaps", 0);
-+	pack->minimum_sounds = integer_read(result.toptab, "minimum_sounds", 0);
-+	pack->map_count = strings_read(result.toptab, "maps", path, pack->maps[0], PORT_TAG_PACK_MAPS,
-+		PORT_TAG_PACK_MAP_LENGTH, 1);
-+	pack->legacy_count = strings_read(result.toptab, "legacy_file_names", path, pack->legacy[0], MAXIMUM_LEGACY,
-+		sizeof(pack->legacy[0]), 0);
-+	pack->wanted_count = strings_read(result.toptab, "wanted", path, pack->wanted[0], MAXIMUM_WANTED,
-+		sizeof(pack->wanted[0]), 0);
-+	if (pack->map_count <= 0 || pack->legacy_count < 0 || pack->wanted_count < 0)
-+	{
-+		if (!pack->map_count)
-+			platform_log("tag packs: %s names no maps; it is left out", path);
-+		good = 0;
-+	}
-+	table = toml_get(result.toptab, "keep");
-+	for (index = 0; good && index < RULE_LISTS; index++)
-+	{
-+		pack->rules[index].count = table.type == TOML_TABLE ? strings_read(table, rule_keys[index], path,
-+			pack->rules[index].rules[0], MAXIMUM_RULES, MAXIMUM_RULE_LENGTH, 1) : 0;
-+		good = pack->rules[index].count >= 0;
-+	}
-+	table = toml_get(result.toptab, "text");
-+	for (index = 0; good && index < TEXTS; index++)
-+	{
-+		value = table.type == TOML_TABLE ? toml_get(table, text_keys[index]) : table;
-+		if (value.type == TOML_STRING)
-+			snprintf(pack->texts[index], sizeof(pack->texts[index]), "%s", value.u.s);
-+	}
-+	toml_free(result);
-+	if (!good)
-+	{
-+		platform_log("tag packs: %s is left out", path);
-+		return 0;
-+	}
-+	pack->content = content_hash(pack);
-+	return 1;
-+}
-+
-+static void packs_read_once(void)
-+{
-+	unsigned int index;
-+
-+	if (packs_read)
++	if (settings.read_at == config_changes())
 +		return;
-+	packs_read = 1;
-+	packs = calloc(MAXIMUM_TAG_PACKS, sizeof(*packs));
-+	if (!packs)
++	settings.read_at = config_changes();
++	settings.on = config_boolean("cheats.third_person") != 0;
++	value = config_string("cheats.third_person_shoulder");
++	settings.shoulder = value && !strcmp(value, "left") ? _shoulder_left :
++		value && !strcmp(value, "center") ? _shoulder_center : _shoulder_right;
++	value = config_string("cheats.third_person_distance");
++	settings.distance = value && !strcmp(value, "near") ? 1 : value && !strcmp(value, "far") ? 2 : 0;
++}
++
++boolean third_person_active(short local_player_index)
++{
++	long player_index, unit_index;
++	struct unit_datum *unit;
++
++	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
++		cinematic_in_progress() || (director_camera_scripted && *director_camera_scripted))
++		return FALSE;
++	player_index = local_player_get_player_index(local_player_index);
++	if (player_index == NONE)
++		return FALSE;
++	unit_index = player_control_get_unit_index(local_player_index);
++	if (unit_index == NONE || player_get(player_index)->unit_index != unit_index)
++		return FALSE;
++	unit = unit_try_and_get(unit_index);
++	if (!unit || TEST_FLAG(unit->object.damage_flags, _object_dead_bit) ||
++		unit->object.parent_object_index != NONE ||
++		unit->unit.current_zoom_level != NONE || unit->unit.desired_zoom_level != NONE)
++		return FALSE;
++	/* (a game of the player's own, as the cheats: none in another's) */
++	if (game_connection() != _game_connection_local || network_game_distributed_client())
++		return FALSE;
++	settings_read();
++	return settings.on;
++}
++
++/* the view of this tick's command, still over the shoulder */
++static boolean third_person_viewing(short local_player_index)
++{
++	return local_player_index >= 0 && local_player_index < MAXIMUM_LOCAL_PLAYERS &&
++		views[local_player_index].valid && views[local_player_index].commanded_at == game_time_get() &&
++		director_get_perspective(local_player_index) == _director_perspective_third_person &&
++		third_person_active(local_player_index);
++}
++
++void third_person_command(short local_player_index, real_euler_angles2d const *facing,
++	struct camera_command *command)
++{
++	long unit_index = player_control_get_unit_index(local_player_index);
++	real side;
++	real distance = THIRD_PERSON_AIM_RANGE;
++	real_vector3d ray;
++	struct collision_result collision;
++
++	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS || unit_index == NONE)
 +		return;
-+	for (index = 0; index < tag_pack_manifests_embedded_count && pack_count < MAXIMUM_TAG_PACKS; index++)
-+	{
-+		const struct tag_pack_manifest_embedded *embedded = &tag_pack_manifests_embedded[index];
-+		long other;
++	settings_read();
++	side = settings.shoulder == _shoulder_left ? -1.f : settings.shoulder == _shoulder_center ? 0.f : 1.f;
 +
-+		if (!embedded->path || !pack_read(&packs[pack_count], embedded->path, (const char *)embedded->data,
-+			embedded->size))
-+			continue;
-+		for (other = 0; other < pack_count && strcmp(packs[other].name, packs[pack_count].name); other++)
-+		{
-+		}
-+		if (other < pack_count)
-+		{
-+			platform_log("tag packs: %s is named twice; the second is left out", packs[pack_count].name);
-+			continue;
-+		}
-+		platform_log("tag packs: %s, %ld maps, content %08lx", packs[pack_count].name, packs[pack_count].map_count,
-+			packs[pack_count].content);
-+		pack_count++;
++	/* what the eye's line hits, as a shot would */
++	unit_get_camera_position(unit_index, &views[local_player_index].eye);
++	vector3d_from_euler_angles2d(&views[local_player_index].forward, facing);
++	scale_vector3d(&views[local_player_index].forward, THIRD_PERSON_AIM_RANGE, &ray);
++	if (collision_test_vector(_collision_test_for_projectiles_flags, &views[local_player_index].eye, &ray,
++		unit_index, &collision))
++	{
++		distance = MAX(collision.t * THIRD_PERSON_AIM_RANGE, THIRD_PERSON_AIM_NEAREST);
++	}
++
++	/* (afresh for another unit: a spawn) */
++	if (!views[local_player_index].valid || views[local_player_index].unit_index != unit_index)
++	{
++		views[local_player_index].side = side;
++		views[local_player_index].aim_distance = distance;
++		views[local_player_index].glided_at = game_time_get();
++	}
++	else if (views[local_player_index].glided_at != game_time_get())
++	{
++		views[local_player_index].side += (side - views[local_player_index].side) * THIRD_PERSON_SIDE_GLIDE;
++		views[local_player_index].aim_distance +=
++			(distance - views[local_player_index].aim_distance) * THIRD_PERSON_AIM_GLIDE;
++		views[local_player_index].glided_at = game_time_get();
++	}
++	views[local_player_index].valid = TRUE;
++	views[local_player_index].unit_index = unit_index;
++	views[local_player_index].commanded_at = game_time_get();
++
++	/* (the observer's offset: i forward, j right, k up of the eye) */
++	side = views[local_player_index].side;
++	command->offset.i = 0.f;
++	command->offset.j = side * THIRD_PERSON_SIDE;
++	command->offset.k = THIRD_PERSON_RISE + (1.f - (side < 0.f ? -side : side)) *
++		(THIRD_PERSON_CENTER_RISE - THIRD_PERSON_RISE);
++	command->depth = third_person_distances[settings.distance];
++}
++
++void third_person_clip_focus(short local_player_index, real_point3d const *eye, real_point3d *focus)
++{
++	real_vector3d vector;
++	real length;
++	struct collision_result collision;
++
++	if (!third_person_viewing(local_player_index))
++		return;
++	vector_from_points3d(eye, focus, &vector);
++	length = magnitude3d(&vector);
++	if (length < 0.01f)
++		return;
++	if (collision_test_vector(THIRD_PERSON_WALL_FLAGS, eye, &vector, views[local_player_index].unit_index,
++		&collision))
++	{
++		point_from_line3d(eye, &vector, MAX(collision.t - THIRD_PERSON_WALL_MARGIN / length, 0.f), focus);
 +	}
 +}
 +
-+/* ---------- asking */
-+
-+static const struct tag_pack *pack_get(long pack)
++/* (a vector turned by the turn taking from to to: Rodrigues's rotation) */
++static void third_person_turn(real_vector3d const *axis, real cosine, real sine, real_vector3d const *vector,
++	real_vector3d *result)
 +{
-+	packs_read_once();
-+	return pack >= 0 && pack < pack_count ? &packs[pack] : NULL;
++	real_vector3d across;
++	real along = dot_product3d(axis, vector) * (1.f - cosine);
++
++	cross_product3d(axis, vector, &across);
++	result->i = vector->i * cosine + across.i * sine + axis->i * along;
++	result->j = vector->j * cosine + across.j * sine + axis->j * along;
++	result->k = vector->k * cosine + across.k * sine + axis->k * along;
 +}
 +
-+long port_tag_packs_count(void)
++boolean third_person_direct(short local_player_index, struct observer_result const *camera,
++	struct observer_result *result)
 +{
-+	packs_read_once();
-+	return pack_count;
++	real_vector3d now;
++	real_vector3d axis;
++	real_vector3d offset;
++	real_vector3d turned;
++	real cosine, sine;
++
++	if (!camera || !third_person_viewing(local_player_index) || director_inhibited_facing(local_player_index))
++		return FALSE;
++	player_control_get_facing_direction(local_player_index, &now);
++	if (normalize3d(&now) < 0.5f)
++		return FALSE;
++	cross_product3d(&views[local_player_index].forward, &now, &axis);
++	sine = normalize3d(&axis);
++	cosine = dot_product3d(&views[local_player_index].forward, &now);
++	/* (no turn since the tick, or one too large to be a frame's) */
++	if (sine < 0.0001f || cosine < 0.5f)
++		return FALSE;
++	*result = *camera;
++	vector_from_points3d(&views[local_player_index].eye, &camera->position, &offset);
++	third_person_turn(&axis, cosine, sine, &offset, &turned);
++	result->position.x = views[local_player_index].eye.x + turned.i;
++	result->position.y = views[local_player_index].eye.y + turned.j;
++	result->position.z = views[local_player_index].eye.z + turned.k;
++	third_person_turn(&axis, cosine, sine, &camera->forward, &result->forward);
++	normalize3d(&result->forward);
++	observer_up_from_forward(&result->forward, &result->up);
++	return TRUE;
 +}
 +
-+const char *port_tag_packs_name(long pack)
++void third_person_converge(short local_player_index, struct observer_result *result)
 +{
-+	const struct tag_pack *got = pack_get(pack);
++	real_point3d target;
++	real_vector3d forward;
 +
-+	return got ? got->name : "";
-+}
-+
-+long port_tag_packs_find(const char *name)
-+{
-+	long index;
-+
-+	packs_read_once();
-+	for (index = 0; name && index < pack_count; index++)
++	if (!third_person_viewing(local_player_index))
++		return;
++	point_from_line3d(&views[local_player_index].eye, &views[local_player_index].forward,
++		views[local_player_index].aim_distance, &target);
++	vector_from_points3d(&result->position, &target, &forward);
++	/* (not to a point beside or behind the view: the camera pressed
++	against a wall, its line hitting one at the eye) */
++	if (normalize3d(&forward) < THIRD_PERSON_AIM_NEAREST * 0.5f ||
++		dot_product3d(&forward, &views[local_player_index].forward) < 0.7f)
 +	{
-+		if (!strcmp(packs[index].name, name))
-+			return index;
++		return;
 +	}
-+	return -1;
-+}
-+
-+unsigned long port_tag_packs_content(long pack)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got ? got->content : 0;
-+}
-+
-+long port_tag_packs_map_count(long pack)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got ? got->map_count : 0;
-+}
-+
-+const char *port_tag_packs_map(long pack, long index)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got && index >= 0 && index < got->map_count ? got->maps[index] : "";
-+}
-+
-+long port_tag_packs_legacy_count(long pack)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got ? got->legacy_count : 0;
-+}
-+
-+const char *port_tag_packs_legacy(long pack, long index)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got && index >= 0 && index < got->legacy_count ? got->legacy[index] : "";
-+}
-+
-+long port_tag_packs_minimum_bitmaps(long pack)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got ? got->minimum_bitmaps : 0;
-+}
-+
-+long port_tag_packs_minimum_sounds(long pack)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got ? got->minimum_sounds : 0;
-+}
-+
-+long port_tag_packs_wanted_count(long pack)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got ? got->wanted_count : 0;
-+}
-+
-+const char *port_tag_packs_wanted(long pack, long index)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+
-+	return got && index >= 0 && index < got->wanted_count ? got->wanted[index] : "";
-+}
-+
-+static int rules_match(const struct rule_list *list, const char *lower, int prefixes)
-+{
-+	long index;
-+
-+	for (index = 0; index < list->count; index++)
-+	{
-+		if (prefixes ? !strncmp(lower, list->rules[index], strlen(list->rules[index])) :
-+			strstr(lower, list->rules[index]) != NULL)
-+			return 1;
-+	}
-+	return 0;
-+}
-+
-+int port_tag_packs_keep(long pack, unsigned long group, const char *name)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+	char lower[256];
-+
-+	if (!got || !name)
-+		return 0;
-+	lower_copy(lower, sizeof(lower), name);
-+	if ((got->rules[RULE_INCLUDE_CONTAINS].count || got->rules[RULE_INCLUDE_PREFIXES].count) &&
-+		!rules_match(&got->rules[RULE_INCLUDE_CONTAINS], lower, 0) &&
-+		!rules_match(&got->rules[RULE_INCLUDE_PREFIXES], lower, 1))
-+		return 0;
-+	if (rules_match(&got->rules[RULE_EXCLUDE_CONTAINS], lower, 0))
-+		return 0;
-+	if (group == 0x6269746DUL /* 'bitm' */)
-+		return !rules_match(&got->rules[RULE_EXCLUDE_BITMAP_PREFIXES], lower, 1);
-+	return !rules_match(&got->rules[RULE_EXCLUDE_SOUND_PREFIXES], lower, 1);
-+}
-+
-+const char *port_tag_packs_text(long pack, const char *which)
-+{
-+	const struct tag_pack *got = pack_get(pack);
-+	int index;
-+
-+	for (index = 0; got && which && index < TEXTS; index++)
-+	{
-+		if (!strcmp(which, text_keys[index]))
-+			return got->texts[index];
-+	}
-+	return "";
++	result->forward = forward;
++	observer_up_from_forward(&result->forward, &result->up);
 +}
 --- /dev/null
-+++ b/port/linux/src/port_tag_packs.h
-@@ -0,0 +1,62 @@
-+/*
-+PORT_TAG_PACKS.H
++++ b/port/linux/game/third_person.h
+@@ -0,0 +1,31 @@
++/* The view over the shoulder, on foot (third_person.c): TRUCOS, MAS TRUCOS,
++TERCERA PERSONA (from Halo Content Evolved's, by Watanoge, AGPL). */
++#ifndef THIRD_PERSON_H
++#define THIRD_PERSON_H
 +
-+The tag packs' manifests (port_tag_packs.c): one TOML file each in
-+port/assets/tag_packs, embedded by tools/embed_assets.py, naming a pack
-+maps/<name>.pack, the maps it is made of, which of their pixels and samples
-+it keeps, and when it is wanted. The game builds and reads the packs
-+(port/linux/game/tag_pack.c, tag_import.c, which declare these for
-+themselves: keep them the same). port/linux/TAG_INJECTION.md has the format.
-+*/
++#include "math/real_math.h"
 +
-+#ifndef PORT_TAG_PACKS_H
-+#define PORT_TAG_PACKS_H
++struct camera_command;
++struct observer_result;
 +
-+/* an embedded manifest, by its file's name in port/assets/tag_packs */
-+struct tag_pack_manifest_embedded
-+{
-+	const char *path;
-+	const unsigned int *data;
-+	unsigned int size;
-+};
-+
-+extern const struct tag_pack_manifest_embedded tag_pack_manifests_embedded[];
-+extern const unsigned int tag_pack_manifests_embedded_count;
-+
-+/* the most maps a pack is made of, and the longest map name (a pack's
-+record holds it: format 2's 32 bytes, the terminator included) */
-+#define PORT_TAG_PACK_MAPS 32
-+#define PORT_TAG_PACK_MAP_LENGTH 32
-+
-+/* the manifests read (the first call reads them): how many. One that does
-+not parse, or whose name is not its file's, is logged and left out */
-+long port_tag_packs_count(void);
-+/* a pack's name (<owner>_<what>, its file maps/<name>.pack), or -1 */
-+const char *port_tag_packs_name(long pack);
-+long port_tag_packs_find(const char *name);
-+/* a hash of what the pack holds: its version, maps, minimums and keep
-+rules (what tools/tag_pack.py hashes alike). A pack file of another is
-+stale, and written again */
-+unsigned long port_tag_packs_content(long pack);
-+/* its maps (a map file's name, without .map) */
-+long port_tag_packs_map_count(long pack);
-+const char *port_tag_packs_map(long pack, long index);
-+/* the files it was once called (each renamed to the pack's at start-up) */
-+long port_tag_packs_legacy_count(long pack);
-+const char *port_tag_packs_legacy(long pack, long index);
-+/* the fewest bitmaps and sounds a map of it has whose pixels and samples it
-+keeps (fewer, and the map's tags were not read right) */
-+long port_tag_packs_minimum_bitmaps(long pack);
-+long port_tag_packs_minimum_sounds(long pack);
-+/* when it is wanted at start-up: "always", "setting:<a boolean setting>",
-+"condition:<a name tag_pack_conditions.c gives>" */
-+long port_tag_packs_wanted_count(long pack);
-+const char *port_tag_packs_wanted(long pack, long index);
-+/* whether it keeps a bitmap's pixels ('bitm') or a sound's samples
-+('snd!') of this tag name */
-+int port_tag_packs_keep(long pack, unsigned long group, const char *name);
-+/* the words shown while it is written: "notice", "building", "ready",
-+"failed" (UTF-8, lines split by \n); "" when it has none */
-+const char *port_tag_packs_text(long pack, const char *which);
++/* the local player's view is over their shoulder: on foot, alive, not
++scoped, in a game of their own, and their setting has it so */
++boolean third_person_active(short local_player_index);
++/* following_camera_update's command for it: the shoulder, the distance
++back, and what the eye's line hits, which the view turns to */
++void third_person_command(short local_player_index, real_euler_angles2d const *facing,
++	struct camera_command *command);
++/* (observer_postcheck) the shoulder kept out of walls: focus, offset from the
++eye, brought back to where the line from the eye meets one */
++void third_person_clip_focus(short local_player_index, real_point3d const *eye, real_point3d *focus);
++/* (observer_postcheck) the view turned to what the eye's line hits, so that
++the screen's middle is where the shot goes */
++void third_person_converge(short local_player_index, struct observer_result *result);
++/* port (trucos): the frame's view (render_interpolation.c), the camera turned
++about the eye by how far the player has turned since the tick, as first
++person's direct camera does: the view turns the frame the player turns.
++Whether it did (result then holds it). */
++boolean third_person_direct(short local_player_index, struct observer_result const *camera,
++	struct observer_result *result);
 +
 +#endif
 --- /dev/null
@@ -12506,6 +12931,144 @@
  			{
  				weapon_index = create_weapon(
  					&starting_profile->secondary_weapon,
+--- /dev/null
++++ b/source/hs/hs_port_guide_routes.h
+@@ -0,0 +1,135 @@
++/* port: the guide arrow's routes (TRUCOS, GUIA, OBJETIVO): for each campaign
++level, the scripts that move it on as the player walks into its trigger volumes,
++in the order the level wakes them. Only their names: the arrow reads, from each
++script's running thread, the volume it is waiting for (hs_runtime.c,
++hs_port_guide_find_target). A level is known by these names among its own
++scripts. Each route ends with NULL, and the list with a second NULL */
++
++static char const *const hs_port_guide_routes[] =
++{
++	/* a10: The Pillar of Autumn */
++	"cont_thing", "tutorial_moving_1", "tutorial_moving_2", "tutorial_hud_shield",
++	"tutorial_asst_kill", "tutorial_first_contact", "tutorial_weapon",
++	"tutorial_motiontracker", "tutorial_melee", "mission_cryo_explosion",
++	"mission_blam_burn", "mission_blam_scare", "mission_containment_1",
++	"containment_1_slam", "mission_crossfire", "mission_bridge", "mission_shoot",
++	"mission_cafeteria", "mission_airlock_1", "mission_flank", "mission_loop",
++	"mission_airlock_2", "mission_knot", "mission_stairs", "mission_containment_2",
++	"mission_lifepod_1", "mission_tunnel", "cryo_search", "mission_boom", "mission_final", NULL,
++	/* a30: Halo */
++	"mission_a30", "mission_lz", "mission_lz_banshee", "mission_first",
++	"mission_first_wave_1", "mission_first_wave_2", "mission_first_defend",
++	"mission_first_retreat", "mission_first_wave_3", "mission_first_wave_4",
++	"mission_first_wave_5", "mission_first_wave_6", "objective_cave", "mission_cave",
++	"mission_cliff", "mission_cliff_marine", "mission_rubble", "mission_rubble_defend",
++	"mission_rubble_retreat", "mission_rubble_wave_2", "mission_rubble_wave_3",
++	"mission_rubble_wave_4", "mission_rubble_wave_5", "mission_river",
++	"mission_river_marine", "mission_river_defend", "mission_river_retreat",
++	"mission_river_wave_2", "mission_river_wave_3", "mission_obj", "mission_mid_rubble_1",
++	"mission_mid_cliff_1", "mission_mid_river_1", "mission_mid_cliff_2", NULL,
++	/* a50: The Truth and Reconciliation */
++	"mission_a50", "mission_area2", "mig_marines_area2", "mission_area3",
++	"mig_marines_area3", "mission_area4", "ini_area4_grunts_m", "mission_area5",
++	"ini_area5_pelican", "enc_grav_hunters", "man_marines_to_door",
++	"mission_grav_mus_hall", "enc_grav_mus_hall", "mission_muster_bay", "ini_muster_hall",
++	"ini_muster_hangar_hall", "mission_hangar", "ini_hangar_hall_open",
++	"ini_hangar_pelican_b", "mission_control", "mission_prison", NULL,
++	/* b30: The Silent Cartographer */
++	"main_b30", "mission_beach_lz", "mission_shafta", "mission_shafta_lock",
++	"mission_shaftb", "mission_crash", "mission_shafta_inv", "crack_arrival",
++	"shaftb_arrival", NULL,
++	/* b40: Assault on the Control Room */
++	"mission_b40", "mission_a1", "mission_a_bridge", "ini_a_bridge_reins", "mission_a2",
++	"ini_a2_top_reins", "mission_ext_a", "ini_ext_a_marines",
++	"ini_ext_a_area_a_migration", "ini_ext_a_area_b", "mission_crevasse", "mission_ext_b",
++	"ini_ext_b_tower", "ini_ext_b_trigger_b", "ini_ext_b_trigger_c",
++	"ini_ext_b_b_dropship_a", "ini_pipe_cov", "mission_b3", "ini_b3_top_reins",
++	"ini_b3_top_tree", "mission_b3_bridge", "ini_b4_bridge_cheat", "mission_b5",
++	"mission_c_bridge", "mission_control", "ini_c_bridge_banshee", "mission_c1",
++	"mission_ext_c", "ini_ext_c_migration", NULL,
++	/* c10: 343 Guilty Spark */
++	"mission_c10", "mission_swamp_a", "enc_swamp1", "enc_swamp2", "inc_log", "inc3",
++	"inc4", "inc5", "inc6", "inc7", "mission_int_a", "ini_crazy_marine",
++	"mission_control", "ini_int_b_lab_b", "ini_int_b_hall_d", "ini_int_a_hall_b",
++	"ini_int_a_lift_a", "ini_int_a_lift_b", "mission_int_b", "ini_int_c_lab_a",
++	"ini_int_c_hall_a_labs", "ini_int_c_hall_b_labs", "ini_int_d_lift_c",
++	"ini_int_d_hall_d_labs", "ini_int_d_hall_e_labs", "ini_int_d_hall_f_labs",
++	"ini_int_d_hall_g_labs", "mission_swamp_b", "ini_swamp_b_marines", NULL,
++	/* c20: The Library */
++	"section1", "enc1", "enc2", "enc3", "enc4", "enc5", "enc6", "enc7", "enc8", "enc1_9",
++	"section2", "enc2_0", "enc2_1", "enc2_2", "enc2_3", "enc2_4", "enc2_5", "enc2_6",
++	"enc2_8", "enc2_10", "enc2_11", "enc2_12", "enc2_9", "enc2_7", "section3", "enc3_1",
++	"enc3_2", "enc3_3", "enc3_4", "monitor2_4", "enc3_5", "enc3_6", "monitor2_5",
++	"monitor2_6", "monitor2_7", "monitor2_8", "monitor2_9", "monitor2_10", "monitor2_11",
++	"monitor2_1", "monitor2_2", "section4", "enc4_0", "enc4_1", "enc4_2", "enc4_3",
++	"enc4_4", "enc4_6", "enc4_7", "enc4_8", "enc4_5", "section5", "enc5_0", "enc5_1",
++	"enc5_2", "enc5_3", "enc5_4", "enc5_5", "monitor3_4", "monitor3_5", "monitor3_6",
++	"monitor3_7", "enc5_6", "monitor3_1", "monitor3_2", "section6", "enc6_1", "enc6_2",
++	"enc6_3", "enc6_4", "monitor3_9", "enc6_5", "enc6_6", "enc6_7", "enc6_8", "enc7_1",
++	"enc7_3", "enc7_4", "enc7_5", "enc7_6", "enc7_7", "enc7_8", "enc7_9", "enc7_10",
++	"enc7_12", "monitor4_4", "monitor4_3", "monitor4_1", "monitor1_2", "monitor1_3",
++	"monitor1_4", "monitor1_5", "monitor1_6", "monitor1_7", "monitor1_9", "monitor1_10",
++	"monitor1_12", "monitor1_13", "monitor1_14", "monitor1_15", "monitor1_9b", NULL,
++	/* c40: Two Betrayals */
++	"e3_a", "c3_base_tier_2", "e5_a", "e6_a", "e7_b", "e7_c", "e8_a", "e8_b", "e20_a",
++	"e21_a", "e21_b", "e22_a", "e30_a", "e31_b", "e31_c", "e31_d", "e33_a", "e33_b",
++	"e34_a", "e37_a", "e38_a", "e39_a", "e40_a", "banshee_alt", "e43_a", "e43_b", "e43_c",
++	"e44_a", "e46_speech", "e46_a", "e48_a", "e50_a", "e51_a", "second_lp", "e52_a",
++	"e52_c", "e53_a", "c40_230_240_250", "waypoint_off", "e57_a", "e59_a", "e59_b",
++	"e59_c", "e60_a", "e61_a", "e62_a", "e62_b", "e65_a", "last_waypoint_off", "e66_a",
++	"end", NULL,
++	/* d20: Keyes */
++	"section1", "enc1_1", "enc1_2", "enc1_4", "enc1_5", "section3", "enc3_1", "enc3_2",
++	"enc3_3", "enc3_4", "enc3_5", "enc3_6", "enc3_7", "enc3_8", "enc3_9", "section4",
++	"enc4_2", "enc4_3", "enc4_4", "enc4_5", "enc4_6", "enc4_7", "enc4_9", "enc4_8",
++	"section5", "enc5_1", "enc5_2", "enc5_3", "enc5_4", "enc5_5", "enc5_6", "enc5_7",
++	"section6", "enc6_1", "enc6_2", "enc6_3", "enc6_4", "section7", "enc7_1", "enc7_2",
++	"enc7_3", "enc7_6", "enc7_5", NULL,
++	/* d40: The Maw */
++	"section1", "enc1_1", "enc1_2", "enc1_3", "enc1_4", "section2", "enc2_1", "enc2_2",
++	"enc2_4", "enc2_5", "enc2_6", "enc2_7", "section3", "enc3_1", "enc3_2", "enc3_3",
++	"enc3_4", "enc3_5", "enc3_6", "section4", "enc4_1", "enc4_3", "section5", "enc5_1",
++	"enc5_1_s12", "enc5_2", "enc5_3", "section6", "enc6_0", "enc6_0_1", "enc6_1",
++	"enc6_1_1", "enc6_1_2", "enc6_1_3", "enc6_1_4", "enc6_1_5", "enc6_1_6", "enc6_1_7",
++	"enc6_1_8", "enc6_1_9", "enc6_2", "enc6_2_0", "enc6_2_1", "enc6_2_2", "enc6_2_3",
++	"enc6_2_4", "enc6_2_5", "enc6_2_6", "enc6_2_7", "enc6_2_8", "enc6_3", "enc6_3_1",
++	"enc6_3_2", "enc6_3_3", "enc6_3_4", "enc6_4", "enc6_4_1", "enc6_4_2", "enc6_4_3",
++	"enc6_4_4", "enc6_4_5", "enc6_4_6", "enc6_4_7", "enc6_4_8", "enc6_5", "enc6_5_1",
++	"enc6_5_2", "enc6_5_3", "enc6_5_4", "enc6_5_5", "enc6_5_6", "enc6_5_7", "enc6_5_8",
++	"enc6_6", "enc6_6_1", "enc6_7", "enc6_7_1", "enc6_7_2", "enc6_8", "enc6_8_1",
++	"enc6_8_2", "enc6_8_3", "enc6_8_4", "enc6_8_5", "enc6_8_6", "enc6_8_7", "enc6_8_8",
++	"enc6_9_1", "section7", "enc7_1", "enc7_7", NULL,
++	NULL
++};
++
++/* port: what to do, for the steps of the routes above whose part of the level
++is clear (TRUCOS, GUIA: under the arrow, and in the HUD when it changes). Each
++by the route's place in the list (0 a10 ... 9 d40) and the step's script: a
++step without one has the text of the nearest step before it. In the game's font,
++without accents. Ends with a NULL script */
++struct hs_port_guide_text
++{
++	short level;
++	char const *script;
++	char const *text;
++};
++
++static struct hs_port_guide_text const hs_port_guide_texts[] =
++{
++	{ 0, "cont_thing", "Haz las pruebas del tripulante" },
++	{ 0, "mission_cryo_explosion", "Sal de la sala criogenica" },
++	{ 0, "mission_bridge", "Ve al puente de mando" },
++	{ 0, "mission_cafeteria", "Busca una capsula de escape" },
++	{ 1, "mission_a30", "Busca y rescata a los marines" },
++	{ 2, "mission_a50", "Entra en la nave del Covenant" },
++	{ 2, "mission_muster_bay", "Busca al capitan Keyes en la nave" },
++	{ 3, "main_b30", "Busca el Cartografo Silencioso" },
++	{ 3, "mission_shaftb", "Baja hasta la sala del mapa" },
++	{ 4, "mission_b40", "Llega a la sala de control" },
++	{ 5, "mission_c10", "Busca al capitan Keyes" },
++	{ 6, "section1", "Sigue a 343 Guilty Spark hasta el Indice" },
++	{ 7, "e3_a", "Destruye los generadores de pulso" },
++	{ 8, "section1", "Busca al capitan Keyes" },
++	{ 9, "section1", "Haz estallar la nave y escapa" },
++	{ 0, NULL, NULL }
++};
 --- a/source/saved games/game_state.c	
 +++ b/source/saved games/game_state.c	
 @@ -158,6 +158,18 @@
