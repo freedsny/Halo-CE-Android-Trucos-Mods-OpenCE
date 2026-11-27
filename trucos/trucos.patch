@@ -657,7 +657,40 @@
  static short difficulty_shown(struct widget_instance *widget)
  {
  	for (; widget; widget = widget->parent)
-@@ -17248,6 +17322,13 @@
+@@ -4433,7 +4507,8 @@
+ tabs' and the buttons' own words */
+ /* the words a help says the host decides a setting by, online (taken out
+ of the words: the panel's facts say it) */
+-static wchar_t const settings_host_choice[] = L"Online: the host's choice.";
++/* (port, trucos: in Spanish, as the menus' helps say it, trucos/es/menus.json) */
++static wchar_t const settings_host_choice[] = L"En linea: lo elige el anfitrion.";
+ 
+ /* words without what a help says of the host's choice, and whether it did */
+ static boolean settings_host_choice_cut(wchar_t *words)
+@@ -4508,8 +4583,8 @@
+ 	if (own != first)
+ 		return;
+ 	if (!own)
+-		settings_wide_copy(whose, L"ALL PLAYERS", ROW_TEXT_LENGTH);
+-	settings_fact_add(facts, L"PROFILE", whose);
++		settings_wide_copy(whose, L"TODOS LOS JUGADORES", ROW_TEXT_LENGTH);
++	settings_fact_add(facts, L"PERFIL", whose);
+ }
+ 
+ /* the facts of a row of a setting for the panel: the value its default
+@@ -4543,9 +4618,9 @@
+ 		shown[length] = 0;
+ 	}
+ 	if (shown[0])
+-		settings_fact_add(facts, L"DEFAULT", shown);
++		settings_fact_add(facts, L"DE FABRICA", shown);
+ 	if (settings_host_choice_cut(words))
+-		settings_fact_add(facts, L"ONLINE", L"HOST'S CHOICE");
++		settings_fact_add(facts, L"EN LINEA", L"LO ELIGE EL ANFITRION");
+ 	settings_profile_fact(name, facts, FALSE);
+ }
+ 
+@@ -17248,6 +17323,13 @@
  		else if (!strcmp(name, "set difficulty"))
  		{
  			main_set_difficulty(PIN(difficulty_shown(widget), 0, 3));

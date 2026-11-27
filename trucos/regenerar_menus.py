@@ -112,7 +112,11 @@ if '"guide.mode", {' not in fuente_c:
 
 # 6) todo en espanol: cada texto que se ve en los menus (de GOAT H1 y del juego), con
 # trucos/es/menus.json (ingles -> espanol, sin tildes ni enes: la fuente del juego).
-# Si un texto que se ve no esta traducido (GOAT H1 agrego uno), se detiene y lo dice
+# En ce/*.xml y model/**: los textos de las filas, sus listas de opciones y su ruta;
+# en model/**, tambien las descripciones del recuadro derecho (<help>), sus notas
+# (<note>) y lo de cada pestana (<about>); en screens/*.xml, lo que se ve de las
+# pantallas (pausa, salir, perfiles, sala, co-op...). Si un texto que se ve no esta
+# traducido (GOAT H1 agrego uno), se detiene y lo dice
 import html
 import re
 
@@ -121,6 +125,8 @@ ya_espanol = set(traducciones.values())
 ENTEROS = ("text", "help", "title", "label")      # un texto entero
 LISTAS = ("strings", "items", "shown")            # palabras separadas por |
 RUTAS = ("crumb",)                                 # partes separadas por " › "
+ELEMENTOS = ("help", "note", "about")              # <help>texto</help> (model/**)
+PANTALLAS = ("label", "text", "title", "detail", "subtitle", "hint")  # screens/*.xml
 TILDES = re.compile(r"[áéíóúÁÉÍÓÚñÑ¿¡]")
 sin_traducir = {}
 
@@ -128,7 +134,8 @@ sin_traducir = {}
 def traducir_texto(texto, archivo):
     if texto in traducciones:
         return traducciones[texto]
-    if texto in ya_espanol or not re.search(r"[A-Za-z]", html.unescape(texto)):
+    sin_valores = re.sub(r"\{[a-z_0-9.]*\}", "", html.unescape(texto))
+    if texto in ya_espanol or not re.search(r"[A-Za-z]", sin_valores):
         return texto
     sin_traducir.setdefault(texto, archivo)
     return texto
@@ -136,22 +143,43 @@ def traducir_texto(texto, archivo):
 
 def traducir_atributo(m, archivo):
     nombre, valor = m.group(1), m.group(2)
-    if nombre in ENTEROS:
-        nuevo = traducir_texto(valor, archivo)
-    elif nombre in LISTAS:
+    if nombre in LISTAS:
         nuevo = "|".join(traducir_texto(v, archivo) for v in valor.split("|"))
-    else:
+    elif nombre in RUTAS:
         nuevo = " › ".join(traducir_texto(v, archivo) for v in valor.split(" › "))
+    else:
+        nuevo = traducir_texto(valor, archivo)
     return f' {nombre}="{nuevo}"'
 
 
+def traducir_elemento(m, archivo):
+    return f"<{m.group(1)}>{traducir_texto(m.group(2), archivo)}</{m.group(1)}>"
+
+
+def fuera_de_comentarios(contenido, cambiar):
+    """cambiar() en el texto, sin tocar los comentarios <!-- -->"""
+    partes = re.split(r"(<!--.*?-->)", contenido, flags=re.S)
+    return "".join(p if p.startswith("<!--") else cambiar(p) for p in partes)
+
+
 patron = re.compile(r' (' + "|".join(ENTEROS + LISTAS + RUTAS) + r')="([^"]*)"')
+patron_elementos = re.compile(r"<(" + "|".join(ELEMENTOS) + r")>([^<]*)</\1>")
+patron_pantallas = re.compile(r' (' + "|".join(PANTALLAS) + r')="([^"]*)"')
 cambiados = 0
-for ruta in sorted(list(ce.glob("*.xml")) + list((menus / "model").rglob("*.xml"))):
+archivos = [(r, "filas") for r in sorted(ce.glob("*.xml")) + sorted((menus / "model").rglob("*.xml"))]
+archivos += [(r, "pantalla") for r in sorted((menus / "screens").glob("*.xml"))]
+for ruta, tipo in archivos:
     if ruta.name == "bitmaps.xml":
         continue
     contenido = ruta.read_text(encoding="utf-8")
-    nuevo = patron.sub(lambda m: traducir_atributo(m, ruta.name), contenido)
+    if tipo == "filas":
+        def cambiar(texto, nombre=ruta.name):
+            texto = patron.sub(lambda m: traducir_atributo(m, nombre), texto)
+            return patron_elementos.sub(lambda m: traducir_elemento(m, nombre), texto)
+    else:
+        def cambiar(texto, nombre=ruta.name):
+            return patron_pantallas.sub(lambda m: traducir_atributo(m, nombre), texto)
+    nuevo = fuera_de_comentarios(contenido, cambiar)
     if nuevo != contenido:
         ruta.write_text(nuevo, encoding="utf-8", newline="")
         cambiados += 1
@@ -161,6 +189,13 @@ if malos:
 if sin_traducir:
     falla(f"{len(sin_traducir)} textos de los menus sin traducir (agregarlos a trucos/es/menus.json): " +
           "; ".join(f"{t!r} ({a})" for t, a in list(sin_traducir.items())[:15]))
+# (el recuadro derecho quita de la descripcion "En linea: lo elige el anfitrion." y lo
+# pone abajo, como EN LINEA: el parche lo busca en espanol en menu_functions.c)
+frase = "En linea: lo elige el anfitrion."
+if not any(frase in t for t in traducciones.values()):
+    falla(f"ninguna descripcion dice {frase!r}: menu_functions.c la busca asi")
+if f'L"{frase}"' not in pathlib.Path("port/linux/game/menu_functions.c").read_text(encoding="utf-8", errors="replace"):
+    falla(f"menu_functions.c no busca {frase!r}: las descripciones la dicen asi")
 print("menus en espanol:", cambiados, "archivos")
 
 print("TRUCOS en GOAT H1:", len(paginas), "paginas,", len(nuevos), "archivos de menu nuevos,", len(pngs), "titulos")
