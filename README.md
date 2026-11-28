@@ -313,8 +313,8 @@ Si una compilación falla (por ejemplo, porque una versión nueva de OpenCE camb
 ### Versiones de prueba
 Los cambios nuevos se prueban primero en la rama **`pruebas`**. Lo que se compila desde ahí es **privado**: sale en **Releases** como **borrador (Draft)**, que solo ve el dueño del repositorio, y es **otra app** ("Halo PRUEBA", paquete `com.halo.decomp.pruebas`) que se instala al lado de la normal sin reemplazarla. Tiene su propia carpeta para los archivos del juego y las partidas. Cuando la prueba sale bien, el cambio pasa a la rama `main`.
 
-### Versión con GOAT H1 (en pruebas)
-En la rama **`pruebas-goat`** se arma otra versión: los mismos trucos sobre **[GOAT H1 (OpenH1)](https://github.com/OpenH1/goath1)**, otro port de Halo CE para Android, con sus controles táctiles, su soporte de control y su renderizado Vulkan. Sale en **Releases** como borrador **"GOAT PRUEBA"** (paquete `com.openh1.openh1.trucos.pruebas`), se instala al lado de las otras y tiene la pestaña **TRUCOS** dentro de sus ajustes. Se está pasando **todo al español**: los menús y ajustes ya están; faltan los títulos dibujados, los botones del menú principal y los controles táctiles. Lo que cambia frente a esta versión está en el [README de esa rama](https://github.com/freedsny/Halo-CE-Android-Trucos-Mods-OpenCE/tree/pruebas-goat#readme).
+### Versión con GOAT H1
+Hay otra versión con los mismos trucos sobre **[GOAT H1 (OpenH1)](https://github.com/OpenH1/goath1)**, otro port de Halo CE para Android con sus propios controles táctiles, soporte de control y gráficos con Vulkan, y **toda en español**: menús, descripciones, títulos, controles táctiles y los textos del juego. Tiene su propio repositorio: **[Halo-GOAT-H1-Trucos-Mod-Espa-ol](https://github.com/freedsny/Halo-GOAT-H1-Trucos-Mod-Espa-ol)**. Se instala al lado de las otras.
 
 ## Cómo está hecho este repositorio
 
@@ -339,6 +339,5 @@ Si OpenCE cambia las partes que toca el parche, la compilación puede fallar en 
 
 - **OpenCE** y todo el código del juego: [OpenCommunityEdition/OpenCE](https://github.com/OpenCommunityEdition/OpenCE), bajo la licencia **GNU AGPL v3**. Los cambios de este repositorio se comparten bajo esa misma licencia (ver [LICENSE](LICENSE)).
 - Trucos (armas y vehículos a elección, sobrescudo infinito, linterna, teletransporte y más), menús en español, flecha guía, HUD movible, HUD moderno, radar redondo y compilación automática: **freddVelp** ([@freedsny](https://github.com/freedsny)).
-- **GOAT H1**, de la versión en pruebas: [OpenH1/goath1](https://github.com/OpenH1/goath1), bajo la licencia **GNU AGPL v3**.
 - La flecha de objetivo usa solo los nombres de los scripts de cada misión como referencia; no incluye scripts ni datos del juego.
 - Halo: Combat Evolved © Microsoft Corporation.
